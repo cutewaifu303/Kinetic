@@ -1,0 +1,91 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+package fr.litarvan.openauth.microsoft;
+
+import fr.litarvan.openauth.microsoft.model.response.MinecraftProfile;
+
+
+
+
+
+
+
+
+
+
+
+
+public class MicrosoftAuthResult
+{
+    private final MinecraftProfile profile;
+    private final String accessToken;
+    private final String refreshToken;
+    private final String xuid;
+    private final String clientId;
+
+    public MicrosoftAuthResult(MinecraftProfile profile, String accessToken, String refreshToken, String xuid, String clientId)
+    {
+        this.profile = profile;
+        this.accessToken = accessToken;
+        this.refreshToken = refreshToken;
+        this.xuid = xuid;
+        this.clientId = clientId;
+    }
+
+    
+
+
+    public MinecraftProfile getProfile()
+    {
+        return profile;
+    }
+
+    
+
+
+    public String getAccessToken()
+    {
+        return accessToken;
+    }
+
+    
+
+
+
+    public String getRefreshToken()
+    {
+        return refreshToken;
+    }
+
+    
+
+
+    public String getXuid()
+    {
+        return this.xuid;
+    }
+
+    
+
+
+    public String getClientId()
+    {
+        return this.clientId;
+    }
+}

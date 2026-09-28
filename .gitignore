@@ -1,0 +1,86 @@
+.gradle
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### IntelliJ IDEA ###
+.idea/modules.xml
+.idea/jarRepositories.xml
+.idea/compiler.xml
+.idea/libraries/
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+### Eclipse ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### VS Code ###
+.vscode/
+
+### Mac OS ###
+.DS_Store
+
+/run
+/.idea
+/run/saves
+/saves
+/src/.idea
+/screenshots
+optionsof.txt
+options.txt
+usercache.json
+/Kinetic
+/.refact
+/assets
+/crash-reports
+servers.dat
+docs/
+.allatori/doc
+launch/jre
+launch/Kinetic.jar
+launcher.properties
+launcher.log
+/logs
+launch/assets/skins
+
+# licensed font: bundled in the jar only, not redistributed as a file
+src/main/resources/assets/minecraft/kinetic/fonts/grandstander.ttf
+
+# JVM crash dumps
+hs_err_pid*.log
+core
+core.*
+
+# launcher stable client jar cache
+/launch-cache
+
+# local debugging leftovers (screenshots, recordings, imgui layout, crash dumps)
+/error.png
+/error.mp4
+/images.png
+/imgui.ini
+/*.mp4
+/.crush/
+/launcher/build
+/dist/

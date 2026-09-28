@@ -1,0 +1,105 @@
+package secret.kinetic.utils.render.shader.impl;
+
+import secret.kinetic.utils.client.MathUtils;
+import secret.kinetic.utils.misc.IMinecraft;
+import secret.kinetic.utils.render.RenderUtils;
+import secret.kinetic.utils.render.shader.ShaderUtils;
+import secret.kinetic.utils.render.shader.StencilUtils;
+import net.minecraft.client.renderer.GlStateManager;
+import net.minecraft.client.renderer.OpenGlHelper;
+import net.minecraft.client.shader.Framebuffer;
+import org.lwjgl.BufferUtils;
+
+import java.nio.FloatBuffer;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+import static secret.kinetic.utils.misc.IMinecraft.mc;
+import static org.lwjgl.opengl.GL11.*;
+import static org.lwjgl.opengl.GL11.GL_ZERO;
+import static org.lwjgl.opengl.GL20.glUniform1;
+
+public class Blur {
+    private static final ShaderUtils GAUSSIAN_BLUR_SHADER = new ShaderUtils("gaussianBlur");
+    private static Framebuffer framebuffer = new Framebuffer(1, 1, false);
+    private static final int MAX_RADIUS = 128;
+    private static final int CACHE_LIMIT = 16;
+    private static final Map<Float, FloatBuffer> gaussianWeightCache = new LinkedHashMap<Float, FloatBuffer>(CACHE_LIMIT, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<Float, FloatBuffer> eldest) {
+            return size() > CACHE_LIMIT;
+        }
+    };
+
+    private static FloatBuffer getGaussianWeights(float radius) {
+        radius = Math.min(radius, MAX_RADIUS);
+        final float r = radius;
+
+        return gaussianWeightCache.computeIfAbsent(r, key -> {
+            FloatBuffer buffer = BufferUtils.createFloatBuffer(MAX_RADIUS);
+            float sigma = key / 2f;
+            float sum = 0f;
+
+            for (int i = 0; i < MAX_RADIUS; i++) {
+                float weight = MathUtils.calculateGaussianValue(i, sigma);
+                if (weight < 0.001f) break;
+                buffer.put(weight);
+                sum += (i == 0) ? weight : 2 * weight;
+            }
+
+            buffer.rewind();
+            for (int i = 0; i < buffer.limit(); i++) {
+                buffer.put(i, buffer.get(i) / sum);
+            }
+
+            buffer.rewind();
+            return buffer;
+        });
+    }
+
+    private static void setupUniforms(float dirX, float dirY, float radius, float strength) {
+        GAUSSIAN_BLUR_SHADER.setUniformi("textureIn", 0);
+        GAUSSIAN_BLUR_SHADER.setUniformf("texelSize", 1.0f / mc.displayWidth, 1.0f / mc.displayHeight);
+        GAUSSIAN_BLUR_SHADER.setUniformf("direction", dirX, dirY);
+        GAUSSIAN_BLUR_SHADER.setUniformf("radius", radius);
+        GAUSSIAN_BLUR_SHADER.setUniformf("strength", strength);
+
+        FloatBuffer weights = getGaussianWeights(radius);
+        weights.rewind();
+        GAUSSIAN_BLUR_SHADER.setUniform1fArray("weights", getGaussianWeights(radius));
+    }
+
+    public static void startBlur() {
+        StencilUtils.initStencilToWrite();
+    }
+
+    public static void endBlur(float radius, float compression, float strength) {
+        if (radius <= 0.0f || compression <= 0.0f) {
+            StencilUtils.uninitStencilBuffer();
+            return;
+        }
+
+        StencilUtils.readStencilBuffer(1);
+        framebuffer = RenderUtils.createFrameBuffer(framebuffer);
+
+        framebuffer.framebufferClear();
+        framebuffer.bindFramebuffer(false);
+        applyBlurPass(compression, 0.0f, radius, strength, mc.getFramebuffer().framebufferTexture);
+        framebuffer.unbindFramebuffer();
+
+        mc.getFramebuffer().bindFramebuffer(false);
+        applyBlurPass(0.0f, compression, radius, strength, framebuffer.framebufferTexture);
+
+        StencilUtils.uninitStencilBuffer();
+        RenderUtils.resetColor();
+        GlStateManager.bindTexture(0);
+    }
+
+    private static void applyBlurPass(float dirX, float dirY, float radius, float strength, int texture) {
+        GAUSSIAN_BLUR_SHADER.init();
+        setupUniforms(dirX, dirY, radius, strength);
+        GlStateManager.bindTexture(texture);
+        ShaderUtils.drawQuads();
+        GAUSSIAN_BLUR_SHADER.unload();
+    }
+}

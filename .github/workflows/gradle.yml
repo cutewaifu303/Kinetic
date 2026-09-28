@@ -1,0 +1,42 @@
+name: build
+
+on:
+  push:
+    branches:
+      - '**'
+    tags-ignore:
+      - 'v*' # Prevents duplicate runs when you push a release tag
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Java setup
+        uses: actions/setup-java@v4
+        with:
+          distribution: "corretto"
+          java-version: 11
+          cache: "gradle" # Fast caching so your public runner completes in seconds
+
+      - name: Gradle build
+        run: |
+          chmod +x ./gradlew
+          ./gradlew clean shadowJar :launcher:jar --no-daemon --stacktrace
+
+      - name: Find and rename artifact
+        run: |
+          mkdir -p output
+          cp build/libs/Kinetic.jar output/Kinetic.jar
+          cp launcher/build/libs/Kinetic.jar output/KineticLauncher.jar
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kinetic
+          path: output/*.jar
+          retention-days: 7 # Keeps your Actions tab tidy by deleting stale dev jars after 5 days

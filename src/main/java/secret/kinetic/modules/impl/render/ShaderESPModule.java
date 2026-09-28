@@ -1,0 +1,93 @@
+package secret.kinetic.modules.impl.render;
+
+import secret.kinetic.api.events.annotations.EventHook;
+import secret.kinetic.api.events.impl.render.Render2DEvent;
+import secret.kinetic.api.events.impl.world.WorldJoinEvent;
+import secret.kinetic.api.properties.impl.ModeProperty;
+import secret.kinetic.managers.impl.ColorManager;
+import secret.kinetic.modules.Module;
+import secret.kinetic.modules.ModuleCategory;
+import secret.kinetic.modules.ModuleInfo;
+import secret.kinetic.utils.render.shader3d.FramebufferShader;
+import secret.kinetic.utils.render.shader3d.impl.GlowShader;
+import secret.kinetic.utils.render.shader3d.impl.OutlineShader;
+import net.minecraft.client.entity.EntityPlayerSP;
+import net.minecraft.client.renderer.culling.Frustum;
+import net.minecraft.client.renderer.culling.ICamera;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.player.EntityPlayer;
+
+@ModuleInfo(label = "Shader ESP", description = "Renders a shader effect around entities", category = ModuleCategory.RENDER)
+public class ShaderESPModule extends Module {
+
+    private final ModeProperty<ShaderMode> mode = new ModeProperty<>("Mode", ShaderMode.OUTLINE);
+
+    private enum ShaderMode {
+        GLOW("Glow"),
+        OUTLINE("Outline");
+
+        public final String name;
+
+        ShaderMode(String name) {
+            this.name = name;
+        }
+
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    private boolean render = true;
+    private final ICamera frustum = new Frustum();
+
+    private boolean shouldRender(Entity entity) {
+        return entity instanceof EntityPlayer && (!(entity instanceof EntityPlayerSP) || mc.gameSettings.thirdPersonView != 0);
+    }
+
+    public boolean isRenderingESP() {
+        return this.render;
+    }
+
+    @Override
+    public void onDisable() {
+        render = true;
+    }
+
+    @EventHook
+    public void onWorldJoin(WorldJoinEvent event) {
+        render = true;
+    }
+
+    @EventHook
+    public void onRender2D(Render2DEvent event) {
+        final boolean glow = mode.getValue() == ShaderMode.GLOW;
+        final FramebufferShader shader = glow ? GlowShader.GLOW_SHADER : OutlineShader.OUTLINE_SHADER;
+
+        shader.startDraw(event.partialTicks);
+
+        render = false;
+        try {
+            Entity view = mc.getRenderViewEntity();
+            if (view != null) {
+                double x = view.lastTickPosX + (view.posX - view.lastTickPosX) * mc.timer.renderPartialTicks;
+                double y = view.lastTickPosY + (view.posY - view.lastTickPosY) * mc.timer.renderPartialTicks;
+                double z = view.lastTickPosZ + (view.posZ - view.lastTickPosZ) * mc.timer.renderPartialTicks;
+                frustum.setPosition(x, y, z);
+            }
+
+            for (EntityPlayer player : mc.theWorld.playerEntities) {
+                if (shouldRender(player) && frustum.isBoundingBoxInFrustum(player.getEntityBoundingBox())) {
+                    mc.getRenderManager().renderEntityStatic(player, mc.timer.renderPartialTicks, true);
+                }
+            }
+        } finally {
+            render = true;
+        }
+
+        float radius = glow ? 3f : 1.3f;
+        float intensity = glow ? 1.5f : 1f;
+
+        shader.stopDraw(ColorManager.getColor(), radius, intensity);
+    }
+}

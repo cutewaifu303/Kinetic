@@ -1,0 +1,16 @@
+package secret.kinetic.api.events.impl.render;
+
+import secret.kinetic.api.events.CancellableEvent;
+
+public class RenderSkyEvent extends CancellableEvent {
+
+    private final float partialTicks;
+
+    public RenderSkyEvent(float partialTicks) {
+        this.partialTicks = partialTicks;
+    }
+
+    public float getPartialTicks() {
+        return partialTicks;
+    }
+}

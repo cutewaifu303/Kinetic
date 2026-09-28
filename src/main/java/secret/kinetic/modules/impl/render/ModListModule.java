@@ -1,0 +1,657 @@
+package secret.kinetic.modules.impl.render;
+
+import secret.kinetic.Kinetic;
+import secret.kinetic.api.events.annotations.EventHook;
+import secret.kinetic.api.events.annotations.EventPriority;
+import secret.kinetic.api.events.impl.player.PreUpdateEvent;
+import secret.kinetic.api.events.impl.render.Render2DEvent;
+import secret.kinetic.api.events.impl.render.Shader2DEvent;
+import secret.kinetic.api.font.CustomFontRenderer;
+import secret.kinetic.api.properties.Property;
+import secret.kinetic.api.properties.impl.ModeProperty;
+import secret.kinetic.api.properties.impl.NumberProperty;
+import secret.kinetic.managers.impl.ColorManager;
+import secret.kinetic.modules.Module;
+import secret.kinetic.modules.ModuleCategory;
+import secret.kinetic.modules.ModuleInfo;
+import secret.kinetic.utils.misc.IMinecraft;
+import secret.kinetic.utils.misc.Translate;
+import secret.kinetic.utils.render.FontUtils;
+import secret.kinetic.utils.render.RenderUtils;
+import secret.kinetic.utils.render.KineticImage;
+import secret.kinetic.utils.render.Spring;
+import secret.kinetic.utils.render.glass.LiquidGlass;
+import secret.kinetic.utils.render.glass.Wordmark;
+import net.minecraft.client.gui.Gui;
+import net.minecraft.client.gui.ScaledResolution;
+
+import java.awt.*;
+import java.util.*;
+import java.util.List;
+
+@ModuleInfo(label = "Mod List", category = ModuleCategory.RENDER, description = "Shows the enabled mods on your HUD", enabledByDefault = true)
+public class ModListModule extends Module implements IMinecraft {
+
+    private final ModeProperty<Style> style = new ModeProperty<>("Style", Style.CLEAN);
+    private final NumberProperty rowOpacity = new NumberProperty("Row Opacity", 48, 0, 80, 1, () -> style.getValue() == Style.CLEAN);
+    private final Property<Boolean> accentBar = new Property<>("Accent Bar", true, () -> style.getValue() == Style.CLEAN);
+    private final Property<Boolean> glassRows = new Property<>("Glass Rows", false, () -> style.getValue() == Style.CLEAN);
+    private final Property<Boolean> showVisuals = new Property<>("Show Visuals", false, () -> style.getValue() == Style.CLEAN);
+    private final Property<Boolean> bg = new Property<>("Background", true, () -> style.getValue() == Style.CLASSIC);
+    public NumberProperty arrayBg = new NumberProperty("Background Opacity", 155, 0, 255, 1, bg::getValue);
+    private final Property<Boolean> outline = new Property<>("Outline", false);
+    private final Property<Boolean> line = new Property<>("Line", true, () -> !outline.getValue());
+    public static final Property<Boolean> hideVisuals = new Property<>("Hide Visuals", false);
+    public static final Property<Boolean> hideMisc = new Property<>("Hide Misc", false);
+    private static final Property<Boolean> useCustomFont = new Property<>("Use Custom Font", true);
+    private static final Property<Boolean> hideSuffix = new Property<>("Hide Suffix", false);
+    private final ModeProperty<SuffixMode> suffixMode = new ModeProperty<>("Suffix Mode", SuffixMode.SPACE, () -> !hideSuffix.getValue());
+    private final Property<Boolean> noSpaces = new Property<>("No Spaces", false);
+    private final Property<Boolean> lowercase = new Property<>("Lowercase", false);
+    private final Property<Boolean> bold = new Property<>("Bold", false);
+    private final ModeProperty<ColorMode> colorMode = new ModeProperty<>("Color Mode", ColorMode.FADE);
+    public static final NumberProperty padding = new NumberProperty("Padding", 2, 0, 6, 0.5);
+    public static NumberProperty offset = new NumberProperty("Offset", 0, 0, 30, 1);
+    private final NumberProperty lineWidth = new NumberProperty("Line Width", 1.0, 0.5, 1.0, 0.1);
+
+    private static final float TEXT_HEIGHT = 8f;
+    private static final float MARGIN = 6f;
+    private static final int SUFFIX_COLOR = 0xFFC3C3CB;
+    
+    private static final int ROW_TINT = 0x1A2231;
+    private static final int ISRAEL_FIRST = 0xFF0038B8, ISRAEL_SECOND = 0xFF4C8DFF;
+
+    private static final int[][] MTF_COLORS = {
+            {91, 206, 250},
+            {245, 169, 184},
+            {255, 255, 255}
+    };
+
+    private static final Map<Module, String> displayLabelCache = new HashMap<>();
+    
+    private static final Set<String> CLEAN_HIDDEN = new HashSet<>(Arrays.asList(
+            "Discord RPC", "Input Fixes", "Item Delays", "Teams", "Anti Bot", "Friends"));
+    public static List<Module> moduleCache;
+
+    private final Set<Module> seededModules = new HashSet<>();
+    private final Map<Module, Boolean> previousVisibility = new HashMap<>();
+
+    
+    public static float listBottom;
+
+    public enum Style {
+        CLEAN("Clean"), CLASSIC("Classic");
+        public final String name;
+
+        Style(String name) {
+            this.name = name;
+        }
+
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    public enum SuffixMode {
+        SPACE("Space"), DASH("Dash"), BRACKETS("Brackets"), PIPE("Pipe");
+        public final String name;
+
+        SuffixMode(String name) {
+            this.name = name;
+        }
+
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    public enum ColorMode {
+        STATIC("Static"),
+        FADE("Fade"),
+        MTF("MTF");
+
+        public final String name;
+
+        ColorMode(String name) {
+            this.name = name;
+        }
+
+        public String toString() {
+            return name;
+        }
+    }
+
+    
+
+    
+    private static final class Entry {
+        final Module module;
+        String name = "", suffix = "";
+        float nameWidth, suffixWidth, width;
+        final Spring shown = new Spring(0f);
+        final Spring pos = new Spring(0f);
+        boolean placed;
+
+        Entry(Module module) {
+            this.module = module;
+        }
+    }
+
+    private final Map<Module, Entry> entries = new IdentityHashMap<>();
+    private final List<Entry> ordered = new ArrayList<>();
+    private boolean orderDirty = true;
+    private long cleanLastFrame;
+    private static float cleanRow = 11f;
+
+    
+    public static float cleanRowHeight() {
+        return cleanRow;
+    }
+
+    private CustomFontRenderer cleanFont() {
+        return FontUtils.getFont("inter-semibold", 18);
+    }
+
+    private boolean listed(Module module) {
+        if (shouldSkip(module) || CLEAN_HIDDEN.contains(module.getLabel())) return false;
+        return module.getCategory() != ModuleCategory.RENDER || showVisuals.getValue();
+    }
+
+    
+    private CustomFontRenderer measuredWith;
+    private boolean measuredMc;
+
+    private void refreshEntries() {
+        if (moduleCache == null) return;
+        boolean mcFont = isMcFontActive();
+        CustomFontRenderer font = cleanFont();
+        
+        if (font != measuredWith || mcFont != measuredMc) {
+            measuredWith = font;
+            measuredMc = mcFont;
+            for (Entry entry : ordered) entry.name = "\u0000";
+        }
+        for (Module module : moduleCache) {
+            if (!listed(module)) continue;
+            Entry entry = entries.get(module);
+            if (entry == null) {
+                entry = new Entry(module);
+                entries.put(module, entry);
+                ordered.add(entry);
+                orderDirty = true;
+            }
+            String name = module.getLabel();
+            String suffix = module.getSuffix();
+            if (noSpaces.getValue()) {
+                name = name.replace(" ", "");
+                if (suffix != null) suffix = suffix.replace(" ", "");
+            }
+            if (lowercase.getValue()) {
+                name = name.toLowerCase(Locale.ROOT);
+                if (suffix != null) suffix = suffix.toLowerCase(Locale.ROOT);
+            }
+            if (hideSuffix.getValue() || suffix == null || suffix.isEmpty()) suffix = "";
+            else suffix = getFormattedSuffixString(suffix);
+            if (!name.equals(entry.name) || !suffix.equals(entry.suffix)) {
+                entry.name = name;
+                entry.suffix = suffix;
+                entry.nameWidth = mcFont ? mc.fontRendererObj.getStringWidth(name) : font.getStringWidth(name);
+                entry.suffixWidth = suffix.isEmpty() ? 0f : (mcFont ? mc.fontRendererObj.getStringWidth(suffix) : font.getStringWidth(suffix));
+                float width = entry.nameWidth + entry.suffixWidth;
+                if (width != entry.width) orderDirty = true;
+                entry.width = width;
+            }
+        }
+        if (orderDirty) {
+            ordered.sort((a, b) -> Float.compare(b.width, a.width));
+            orderDirty = false;
+        }
+    }
+
+    
+
+    @EventHook
+    public void onPreUpdate(PreUpdateEvent event) {
+        if (moduleCache == null) {
+            return;
+        }
+        if (style.getValue() == Style.CLEAN) {
+            refreshEntries();
+            return;
+        }
+
+        CustomFontRenderer fr = getActiveFont();
+        if (fr == null) {
+            return;
+        }
+
+        for (Module module : moduleCache) {
+            displayLabelCache.put(module, getDisplayLabel(module));
+        }
+
+        moduleCache.sort(new LengthComparator());
+    }
+
+    @EventHook(EventPriority.VERY_HIGH)
+    public void onRender2D(Render2DEvent event) {
+        if (style.getValue() == Style.CLEAN) {
+            renderClean();
+        } else {
+            renderArrayList();
+        }
+    }
+
+    @EventHook(EventPriority.VERY_HIGH)
+    public void onShader2D(Shader2DEvent event) {
+        
+        if (style.getValue() != Style.CLEAN) renderArrayList();
+    }
+
+    
+
+
+
+
+    private void renderClean() {
+        long now = System.currentTimeMillis();
+        float dt = cleanLastFrame == 0L ? 16f : Math.min(100f, now - cleanLastFrame);
+        cleanLastFrame = now;
+        if (moduleCache == null) {
+            moduleCache = new ArrayList<>(Kinetic.INSTANCE.getModuleManager().getModules());
+            refreshEntries();
+        }
+        boolean mcFont = isMcFontActive();
+        CustomFontRenderer font = cleanFont();
+        
+        if (font != measuredWith || mcFont != measuredMc) refreshEntries();
+        float textH = mcFont ? mc.fontRendererObj.FONT_HEIGHT : font.getHeight();
+        float rowH = textH + 3.5f;
+        cleanRow = rowH;
+
+        ScaledResolution sr = new ScaledResolution(mc);
+        float right = WatermarkModule.wordmarkRight();
+        float y;
+        if (Float.isNaN(right)) {
+            right = sr.getScaledWidth() - MARGIN - offset.getValue().floatValue();
+            y = MARGIN + offset.getValue().floatValue();
+        } else {
+            y = WatermarkModule.wordmarkBottom() + 3.5f;
+        }
+
+        boolean israel = KineticImage.isIsraelTheme();
+        int c1 = israel ? ISRAEL_FIRST : Wordmark.themeFirst(), c2 = israel ? ISRAEL_SECOND : Wordmark.themeSecond();
+        float phase = Wordmark.phase(Wordmark.animated()) + 0.9f;
+        int rowAlpha = (int) (rowOpacity.getValue().floatValue() * 2.55f);
+        boolean bar = accentBar.getValue();
+        boolean glass = glassRows.getValue() && LiquidGlass.glassActive();
+        float padX = 4f, barW = bar ? 2f : 0f;
+
+        int index = 0;
+        float cursor = y;
+        for (Entry entry : ordered) {
+            boolean visible = entry.module.isVisible() && listed(entry.module);
+            entry.shown.target = visible ? 1f : 0f;
+            float s = entry.shown.update(dt, 330f, 1f);
+            if (s <= 0.01f && !visible) {
+                entry.placed = false;
+                continue;
+            }
+            if (!entry.placed) {
+                entry.pos.snap(cursor);
+                entry.placed = true;
+            }
+            entry.pos.target = cursor;
+            float ry = entry.pos.update(dt, 300f, 0.95f);
+            float w = entry.width + padX * 2f + barW + (bar ? 1.5f : 0f);
+            float slide = (1f - s) * (w + 14f);
+            float rx = right - w + slide;
+            int color = withAlpha(Wordmark.gradient(c1, c2, phase + (index + 1) * 0.05f), s);
+
+            if (glass) {
+                LiquidGlass.panel(rx, ry, w, rowH, 3f, s, 0f);
+            } else if (rowAlpha > 0) {
+                LiquidGlass.rect(rx, ry, w, rowH, 2.5f, ((int) (rowAlpha * s) << 24) | ROW_TINT);
+            }
+            if (bar) LiquidGlass.rect(rx + w - barW, ry, barW, rowH, 0f, color);
+
+            float tx = rx + padX, ty = ry + (rowH - textH) / 2f + 0.5f;
+            if (mcFont) {
+                mc.fontRendererObj.drawString(entry.name, tx, ty, color, true);
+                if (!entry.suffix.isEmpty()) mc.fontRendererObj.drawString(entry.suffix, tx + entry.nameWidth, ty, withAlpha(SUFFIX_COLOR, s), true);
+            } else {
+                int shadow = (int) (0x75 * s) << 24;
+                font.drawString(entry.name, tx + 0.6f, ty + 0.6f, shadow);
+                font.drawString(entry.name, tx, ty, color);
+                if (!entry.suffix.isEmpty()) {
+                    font.drawString(entry.suffix, tx + entry.nameWidth + 0.6f, ty + 0.6f, shadow);
+                    font.drawString(entry.suffix, tx + entry.nameWidth, ty, withAlpha(SUFFIX_COLOR, s));
+                }
+            }
+            cursor += rowH * s;
+            index++;
+        }
+        listBottom = cursor;
+    }
+
+    private static int withAlpha(int argb, float alpha) {
+        int a = Math.max(0, Math.min(255, (int) ((argb >>> 24) * alpha)));
+        return a << 24 | (argb & 0xFFFFFF);
+    }
+
+    
+
+    private CustomFontRenderer getActiveFont() {
+        return FontUtils.getFont(bold.getValue() ? "sf-bold" : "sf", 18);
+    }
+
+    private boolean isMcFontActive() {
+        return !useCustomFont.getValue();
+    }
+
+    private int getTextWidth(CustomFontRenderer fr, String text) {
+        if (text == null) {
+            return 0;
+        }
+
+        if (isMcFontActive()) {
+            return mc.fontRendererObj.getStringWidth(text);
+        }
+
+        return fr == null ? 0 : fr.getStringWidth(text);
+    }
+
+    private float drawText(CustomFontRenderer fr, String text, float x, float y, int color) {
+        if (text == null) {
+            return x;
+        }
+
+        if (isMcFontActive()) {
+            return mc.fontRendererObj.drawStringWithShadow(text, x, y, color);
+        }
+
+        return fr.drawStringWithShadow(text, x, y, color);
+    }
+
+    private boolean shouldSkip(Module module) {
+        return (hideVisuals.getValue() && module.getCategory() == ModuleCategory.RENDER)
+                || (hideMisc.getValue() && module.getCategory() == ModuleCategory.MISC)
+                || module instanceof ClickGUIModule
+                || module instanceof WatermarkModule
+                || module instanceof ModListModule
+                || module instanceof InterfaceModule
+                || module instanceof ClientFontModule;
+    }
+
+    private void renderArrayList() {
+        CustomFontRenderer fr = getActiveFont();
+        ScaledResolution sr = new ScaledResolution(mc);
+
+        if (fr == null) {
+            return;
+        }
+
+        if (moduleCache == null) {
+            moduleCache = new ArrayList<>(Kinetic.INSTANCE.getModuleManager().getModules());
+        }
+
+        float pad = padding.getValue().floatValue();
+        float lw = lineWidth.getValue().floatValue();
+        int shownRows = 0;
+        for (Module module : moduleCache) {
+            if (!shouldSkip(module) && module.isVisible()) shownRows++;
+        }
+        listBottom = offset.getValue().floatValue() + shownRows * (TEXT_HEIGHT + pad * 2f);
+        float off = offset.getValue().floatValue();
+        float screenX = sr.getScaledWidth() - off;
+        float screenRight = sr.getScaledWidth();
+        float rowStep = TEXT_HEIGHT + (pad * 2);
+
+        List<Module> filteredModules = new ArrayList<>();
+        for (Module module : moduleCache) {
+            if (shouldSkip(module)) {
+                continue;
+            }
+            filteredModules.add(module);
+        }
+
+        updatePositions(filteredModules, fr, screenX, screenRight, off, pad, rowStep);
+
+        final int moduleCacheSize = filteredModules.size();
+        int lastVisibleModuleIndex = moduleCacheSize - 1;
+
+        for (; lastVisibleModuleIndex > 0; lastVisibleModuleIndex--) {
+            if (filteredModules.get(lastVisibleModuleIndex).isVisible()) {
+                break;
+            }
+        }
+
+        int firstVisibleModuleIndex = -1;
+        int visibleModuleCount = 0;
+
+        for (int i = 0; i < moduleCacheSize; i++) {
+            final Module module = filteredModules.get(i);
+            final Translate translate = module.getTranslate();
+            final String name = displayLabelCache.get(module);
+            final float moduleWidth = getTextWidth(fr, name);
+            final boolean visible = module.isVisible();
+
+            if (visible && firstVisibleModuleIndex == -1) {
+                firstVisibleModuleIndex = i;
+            }
+
+            double translateX = translate.getX();
+            double translateY = translate.getY();
+
+            if (visible || translateX < screenX) {
+                int aColor = getColorForModule(visibleModuleCount);
+
+                if (bg.getValue()) {
+                    float bgLeft = (!line.getValue() && !outline.getValue()) ? (float) translateX - pad : (float) translateX - pad - lw;
+                    float bgRight = (off > 0 && outline.getValue()) ? screenX + lw : screenX;
+                    Gui.drawRect(bgLeft, (float) translateY - pad, bgRight, (float) translateY + TEXT_HEIGHT + pad, getColorForBG().getRGB());
+                }
+
+                float textX = line.getValue() && !outline.getValue() ? (float) (translateX - lw) : (float) ((float) offset.getValue().floatValue() == 0 ? translateX - 0.5f : (float) translateX);
+                if (pad > 0) {
+                    textX -= pad / getTextWidth(fr, name);
+                }
+
+                drawText(fr, name, useCustomFont.getValue() ? offset.getValue().intValue() > 0 ? textX - 1.0f : textX : textX, (float) translateY, aColor);
+
+                if (outline.getValue()) {
+                    Gui.drawRect((float) translateX - pad - lw, (float) translateY - pad, (float) translateX - pad, (float) translateY + TEXT_HEIGHT + pad, aColor);
+
+                    double outlineTop = translateY - pad - lw;
+                    double outlineBottom = translateY + TEXT_HEIGHT + pad;
+                    float rightEdge = (off > 0) ? screenX + lw : screenX;
+
+                    if (i != firstVisibleModuleIndex) {
+                        Module prevModule = null;
+                        for (int j = i - 1; j >= 0; j--) {
+                            if (filteredModules.get(j).isVisible()) {
+                                prevModule = filteredModules.get(j);
+                                break;
+                            }
+                        }
+                        if (prevModule != null) {
+                            String prevModuleName = displayLabelCache.get(prevModule);
+                            float prevModuleWidth = getTextWidth(fr, prevModuleName);
+                            if (moduleWidth - prevModuleWidth > 0.5f) {
+                                float prevLeftOutline = (float) prevModule.getTranslate().getX() - pad - lw;
+                                Gui.drawRect((float) translateX - pad - lw, (float) outlineTop, prevLeftOutline, (float) outlineTop + lw, aColor);
+                            }
+                        }
+                    } else {
+                        Gui.drawRect((float) translateX - pad - lw, (float) outlineTop, rightEdge, (float) outlineTop + lw, aColor);
+                    }
+
+                    if (i != lastVisibleModuleIndex) {
+                        Module nextModule = null;
+                        for (int j = i + 1; j <= lastVisibleModuleIndex; j++) {
+                            if (filteredModules.get(j).isVisible()) {
+                                nextModule = filteredModules.get(j);
+                                break;
+                            }
+                        }
+
+                        if (nextModule != null) {
+                            String nextModuleName = displayLabelCache.get(nextModule);
+                            float nextModuleWidth = getTextWidth(fr, nextModuleName);
+
+                            if (moduleWidth - nextModuleWidth > 0.5f) {
+                                float nextLeftOutline = (float) nextModule.getTranslate().getX() - pad - lw;
+                                Gui.drawRect((float) translateX - pad - lw, (float) outlineBottom, nextLeftOutline, (float) outlineBottom + lw, aColor);
+                            }
+                        }
+                    } else {
+                        Gui.drawRect((float) translateX - pad - lw, (float) outlineBottom, rightEdge, (float) outlineBottom + lw, aColor);
+                    }
+
+                    if (off > 0) {
+                        Gui.drawRect(screenX, (float) translateY - pad, screenX + lw, (float) translateY + TEXT_HEIGHT + pad, aColor);
+                    }
+                }
+
+                if (line.getValue() && !outline.getValue()) {
+                    if (i == firstVisibleModuleIndex) {
+                        Gui.drawRect(screenX - lw, off - pad, screenX, (float) translateY + TEXT_HEIGHT + pad, aColor);
+                    } else {
+                        Module prevModule = null;
+                        for (int j = i - 1; j >= 0; j--) {
+                            if (filteredModules.get(j).isVisible()) {
+                                prevModule = filteredModules.get(j);
+                                break;
+                            }
+                        }
+                        if (prevModule != null) {
+                            double prevY = prevModule.getTranslate().getY();
+                            Gui.drawRect(screenX - lw, (float) prevY + TEXT_HEIGHT + pad, screenX, (float) translateY + TEXT_HEIGHT + pad, aColor);
+                        }
+                    }
+                }
+
+                visibleModuleCount++;
+            }
+
+            previousVisibility.put(module, visible);
+        }
+    }
+
+    private void updatePositions(List<Module> filteredModules, CustomFontRenderer fr, float screenX, float screenRight, float startY, float pad, float rowStep) {
+        float y = startY;
+
+        for (Module module : filteredModules) {
+            Translate translate = module.getTranslate();
+            String name = displayLabelCache.get(module);
+            float moduleWidth = getTextWidth(fr, name);
+            float visibleTargetX = screenX - moduleWidth - pad;
+            float hiddenTargetX = screenRight + moduleWidth + pad + 4f;
+
+            if (!seededModules.contains(module)) {
+                translate.setX(module.isVisible() ? visibleTargetX : hiddenTargetX);
+                translate.setY(y);
+                seededModules.add(module);
+            } else if (module.isVisible()) {
+                translate.animate(visibleTargetX, y);
+            } else {
+                translate.animate(hiddenTargetX, y);
+            }
+
+            if (module.isVisible()) {
+                y += rowStep;
+            }
+        }
+    }
+
+    private Color getColorForBG() {
+        return new Color(15, 19, 28, arrayBg.getValue().intValue());
+    }
+
+    private int getColorForModule(int visibleModuleIndex) {
+        if (colorMode.getValue() == ColorMode.MTF) {
+            int[] c = MTF_COLORS[visibleModuleIndex % MTF_COLORS.length];
+            return new Color(c[0], c[1], c[2]).getRGB();
+        }
+
+        int index = colorMode.getValue() == ColorMode.FADE ? visibleModuleIndex : 0;
+
+        if (ClickGUIModule.color.getValue() == ClickGUIModule.Color.RAINBOW) {
+            float hue = (System.currentTimeMillis() % 3000) / 3000f;
+            if (colorMode.getValue() == ColorMode.FADE) {
+                hue += index * 0.035f;
+            }
+            if (hue > 1.0f) {
+                hue %= 1.0f;
+            }
+            return Color.getHSBColor(hue, 0.55f, 0.9f).getRGB();
+        }
+
+        if (ClickGUIModule.color.getValue() == ClickGUIModule.Color.NOVOLINE) {
+            float hue = (System.currentTimeMillis() % 3000) / 3000f;
+            if (colorMode.getValue() == ColorMode.FADE) {
+                hue += index * 0.035f;
+            }
+            if (hue > 1.0f) {
+                hue %= 1.0f;
+            }
+            return Color.getHSBColor(hue, 0.25f, 0.9f).getRGB();
+        }
+
+        return RenderUtils.interpolateColorsBackAndForth(ClickGUIModule.colorSpeed.getValue().intValue(), index * 10, ColorManager.getColors().getFirst(), ColorManager.getColors().getSecond(), false).getRGB();
+    }
+
+    private String getDisplayLabel(Module m) {
+        String label = m.getLabel();
+        String suffix = m.getSuffix();
+
+        if (noSpaces.getValue()) {
+            label = label.replace(" ", "");
+            if (suffix != null) {
+                suffix = suffix.replace(" ", "");
+            }
+        }
+
+        if (lowercase.getValue()) {
+            label = label.toLowerCase();
+            if (suffix != null) {
+                suffix = suffix.toLowerCase();
+            }
+        }
+
+        if (hideSuffix.getValue()) {
+            suffix = null;
+        }
+
+        if (suffix != null) {
+            return label + "\2477" + getFormattedSuffixString(suffix);
+        }
+        return label;
+    }
+
+    private String getFormattedSuffixString(String rawSuffix) {
+        switch (suffixMode.getValue()) {
+            case SPACE:
+                return " " + rawSuffix;
+            case DASH:
+                return " - " + rawSuffix;
+            case BRACKETS:
+                return " [" + rawSuffix + "]";
+            case PIPE:
+                return " | " + rawSuffix;
+            default:
+                return rawSuffix;
+        }
+    }
+
+    private class LengthComparator implements Comparator<Module> {
+        @Override
+        public int compare(Module o1, Module o2) {
+            CustomFontRenderer fr = getActiveFont();
+            return Float.compare(
+                    getTextWidth(fr, displayLabelCache.get(o2)),
+                    getTextWidth(fr, displayLabelCache.get(o1)));
+        }
+    }
+}

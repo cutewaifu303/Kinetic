@@ -1,0 +1,1 @@
+frames=696 fps=24 width=1280 height=720

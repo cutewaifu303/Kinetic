@@ -1,0 +1,185 @@
+package secret.kinetic.modules.impl.render;
+
+import secret.kinetic.api.events.annotations.EventHook;
+import secret.kinetic.api.events.impl.client.ClientTickEvent;
+import secret.kinetic.api.events.impl.client.PacketReceivedEvent;
+import secret.kinetic.api.events.impl.render.RenderSkyEvent;
+import secret.kinetic.api.properties.Property;
+import secret.kinetic.api.properties.impl.ModeProperty;
+import secret.kinetic.api.properties.impl.NumberProperty;
+import secret.kinetic.managers.impl.ColorManager;
+import secret.kinetic.modules.Module;
+import secret.kinetic.modules.ModuleCategory;
+import secret.kinetic.modules.ModuleInfo;
+import secret.kinetic.utils.render.shader.ShaderUtils;
+import net.minecraft.client.renderer.GlStateManager;
+import net.minecraft.network.play.server.S03PacketTimeUpdate;
+import org.lwjgl.opengl.GL11;
+
+import java.awt.Color;
+import java.time.LocalTime;
+
+@ModuleInfo(label = "Ambience", category = ModuleCategory.RENDER, description = "Changes the world appearance properties: time, color fog and an overridden shader sky")
+public class AmbienceModule extends Module {
+
+    public final Property<Boolean> realTime = new Property<Boolean>("Real World Time", false);
+    public final NumberProperty time = new NumberProperty("Time", 6000.0f, 0.0f, 24000.0f, 100.0f, () -> !realTime.getValue());
+    public static final Property<Boolean> clientColorFog = new Property<Boolean>("Client Color Fog", false);
+
+    public final Property<Boolean> shaderSky = new Property<Boolean>("Shader Sky", false);
+    public final ModeProperty<SkyMode> mode = new ModeProperty<>("Mode", SkyMode.KINETIC, shaderSky::getValue);
+
+    private static final float SKY_RADIUS = 100.0f;
+    private static final int RINGS = 12;
+    private static final int SEGMENTS = 24;
+
+    private ShaderUtils nebulaShader;
+    private ShaderUtils kineticShader;
+    private ShaderUtils auroraShader;
+    private ShaderUtils galaxyShader;
+    private ShaderUtils vaporwaveShader;
+    private final long startTime = System.currentTimeMillis();
+
+    public enum SkyMode {
+        KINETIC("Kinetic"),
+        NEBULA("Nebula"),
+        AURORA("Aurora"),
+        GALAXY("Galaxy"),
+        VAPORWAVE("Vaporwave");
+
+        public final String name;
+
+        SkyMode(String name) {
+            this.name = name;
+        }
+
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    @EventHook
+    public void onTick(ClientTickEvent event) {
+        if (mc.theWorld == null) return;
+
+        if (!realTime.getValue()) {
+            mc.theWorld.setWorldTime(time.getValue().longValue());
+        } else {
+            long mTime;
+
+            final LocalTime localTime = LocalTime.now();
+            final int hour = localTime.getHour();
+            final int minute = localTime.getMinute();
+
+            final long totalMinutes = hour * 60L + minute;
+            long minecraftTime = (totalMinutes * 1000L / 1440L) * 24L;
+            mTime = (minecraftTime + 18000L) % 24000L;
+
+            mc.theWorld.setWorldTime(mTime);
+        }
+    }
+
+    @EventHook
+    public void onPacketReceive(PacketReceivedEvent event) {
+        if (mc.theWorld == null) return;
+
+        if (event.getPacket() instanceof S03PacketTimeUpdate) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHook
+    public void onRenderSky(RenderSkyEvent event) {
+        if (!shaderSky.getValue() || mc.theWorld == null) {
+            return;
+        }
+
+        renderShaderSky(event, () -> renderActiveShader(mode.getValue()));
+        event.setCancelled(true);
+    }
+
+    private void renderShaderSky(RenderSkyEvent event, Runnable draw) {
+        GlStateManager.pushMatrix();
+
+        GlStateManager.depthMask(false);
+        GlStateManager.disableTexture2D();
+        GlStateManager.disableLighting();
+
+        draw.run();
+
+        GlStateManager.enableLighting();
+        GlStateManager.enableTexture2D();
+        GlStateManager.depthMask(true);
+
+        GlStateManager.popMatrix();
+    }
+
+    private void renderActiveShader(SkyMode currentMode) {
+        ShaderUtils shader;
+
+        switch (currentMode) {
+            case KINETIC:
+                if (kineticShader == null) kineticShader = new ShaderUtils("kinetic");
+                shader = kineticShader;
+                break;
+            case NEBULA:
+                if (nebulaShader == null) nebulaShader = new ShaderUtils("nebula");
+                shader = nebulaShader;
+                break;
+            case AURORA:
+                if (auroraShader == null) auroraShader = new ShaderUtils("aurora");
+                shader = auroraShader;
+                break;
+            case GALAXY:
+                if (galaxyShader == null) galaxyShader = new ShaderUtils("galaxy");
+                shader = galaxyShader;
+                break;
+            case VAPORWAVE:
+                if (vaporwaveShader == null) vaporwaveShader = new ShaderUtils("vaporwave");
+                shader = vaporwaveShader;
+                break;
+            default:
+                return;
+        }
+
+        float elapsed = (System.currentTimeMillis() - startTime) / 5000.0f;
+        Color clientColor = ColorManager.getColor();
+
+        shader.init();
+        shader.setUniformf("time", elapsed);
+        shader.setUniformf("color", clientColor.getRed() / 255.0f, clientColor.getGreen() / 255.0f, clientColor.getBlue() / 255.0f);
+        drawSkySphere();
+        shader.unload();
+    }
+
+    private void drawSkySphere() {
+        GL11.glBegin(GL11.GL_QUADS);
+
+        for (int i = 0; i < RINGS; i++) {
+            double theta1 = i * Math.PI / RINGS;
+            double theta2 = (i + 1) * Math.PI / RINGS;
+
+            for (int j = 0; j < SEGMENTS; j++) {
+                double phi1 = j * 2.0 * Math.PI / SEGMENTS;
+                double phi2 = (j + 1) * 2.0 * Math.PI / SEGMENTS;
+
+                skyVertex(theta1, phi1);
+                skyVertex(theta2, phi1);
+                skyVertex(theta2, phi2);
+                skyVertex(theta1, phi2);
+            }
+        }
+
+        GL11.glEnd();
+    }
+
+    private void skyVertex(double theta, double phi) {
+        float x = (float) (Math.sin(theta) * Math.cos(phi));
+        float y = (float) Math.cos(theta);
+        float z = (float) (Math.sin(theta) * Math.sin(phi));
+
+        GL11.glTexCoord3f(x, y, z);
+        GL11.glVertex3f(x * SKY_RADIUS, y * SKY_RADIUS, z * SKY_RADIUS);
+    }
+}

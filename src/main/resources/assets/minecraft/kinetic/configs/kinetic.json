@@ -1,0 +1,702 @@
+{
+  "Modules": {
+    "Anti Bot": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Tablist Check": true,
+        "Check Valid Name": true,
+        "Check Age": true,
+        "Check Latency": true,
+        "FOV Check": true,
+        "Max FOV": 180.0
+      }
+    },
+    "Anti Fireball": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0
+      }
+    },
+    "Anti Void": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Mode": "VANILLA",
+        "Distance": 5.0
+      }
+    },
+    "Aura": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 19,
+        "Targets": [
+          "PLAYERS",
+          "INVISIBLES"
+        ],
+        "Mode": "SINGLE",
+        "Switch Delay": 1.0,
+        "Seek Range": 6.0,
+        "Simulate Mouse Clicks": true,
+        "Attack Range": 3.0,
+        "Swing Range": 6.0,
+        "Block Range": 6.0,
+        "Min CPS": 9.0,
+        "Max CPS": 13.0,
+        "Auto Block": "LEGIT",
+        "Only Block If Hurt": false,
+        "Blockhit Delay": 0.0,
+        "Blockhit Refresh": 0.0,
+        "Predict Lead": 10.0,
+        "Predict Hold": 10.0,
+        "Predict History": 10.0,
+        "Predict Window": 1.5,
+        "Block On Hurt Ticks": 4.0,
+        "Through Walls": false,
+        "Rotations": "NORMAL",
+        "Min Rotation Speed": 4.500000067055225,
+        "Max Rotation Speed": 6.000000089406967,
+        "Body Ease": 0.12999999523162842,
+        "ML Ease": 0.23000000417232513,
+        "Ray Cast": false,
+        "Move Fix": "SILENT",
+        "Keep Sprint": true,
+        "Hypixel Keep Sprint": true,
+        "Auto Disable": false,
+        "Advanced Mode": false,
+        "Hit Vec Override": true,
+        "Hit Vec Mode": "BODY",
+        "Hit Vec Randomization": 0.5,
+        "Cycle Hit Points": false,
+        "Cycle Ticks": 40.0,
+        "Overshoot": true,
+        "Overshoot Amount": 8.0,
+        "Overshoot Recovery": 4.0,
+        "Noise": true,
+        "Noise Mode": "PERLIN",
+        "Noise Frequency": 10.0,
+        "Flick": true,
+        "Flick Chance": 33.0,
+        "Flick Angle": 20.0,
+        "Flick Ticks": 3.0,
+        "Flick Cooldown": 20.0
+      }
+    },
+    "Auto Apple": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Health": 15.0,
+        "Delay": 50.0,
+        "Max Eat Ticks": 40.0
+      }
+    },
+    "Auto Armor": {
+      "toggled": true,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Delay": 0.0,
+        "Stop when moving": true,
+        "Inventory only": true
+      }
+    },
+    "Auto Chat": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Modes": [
+          "REGISTER",
+          "AUTO_PLAY"
+        ],
+        "Password": "kinetic420",
+        "Double Password": true
+      }
+    },
+    "Auto Extinguish": {
+      "toggled": true,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0
+      }
+    },
+    "Auto Pot": {
+      "toggled": true,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Health": 15.0,
+        "Delay": 50.0,
+        "Max Aim Ticks": 10.0
+      }
+    },
+    "Auto Projectile": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Target Range": 4.0,
+        "Swap Mode": "CLIENT"
+      }
+    },
+    "Auto Swap": {
+      "toggled": true,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Sneak Only": false,
+        "Swap Mode": "CLIENT"
+      }
+    },
+    "Back Track": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Min Range": 1.0,
+        "Max Range": 4.0,
+        "Max Delay": 250.0,
+        "Only Kill Aura": true
+      }
+    },
+    "Bed Defender": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Range": 5.0,
+        "Place Delay": 80.0,
+        "Speed": 100.0,
+        "Rotation Tolerance": 35.0,
+        "Swing": true,
+        "Show Progress": true,
+        "Move Fix": true
+      }
+    },
+    "BedWars Utility": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Sword Reveal": true,
+        "Include Stone": false,
+        "Armor Reveal": true,
+        "Invisible Check": true,
+        "Invisibility Status": false
+      }
+    },
+    "Blink": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Mode": "CONSTANT",
+        "Delay": 20.0,
+        "Cancel Received Packets": true,
+        "Render Blink Pos": true
+      }
+    },
+    "Block In": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Rotation Speed": 5.0
+      }
+    },
+    "Bow Aimbot": {
+      "toggled": true,
+      "hidden": true,
+      "Properties": {
+        "Keybind": 0,
+        "Targets": [
+          "PLAYERS"
+        ],
+        "Mode": "DISTANCE",
+        "Range": 256.0,
+        "Lock View": true,
+        "Min Rotation Speed": 3.0,
+        "Max Rotation Speed": 7.0,
+        "Through Walls": false
+      }
+    },
+    "Breaker": {
+      "toggled": true,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 19,
+        "Break Mode": "HYPIXEL",
+        "Breaker Range": 3.0,
+        "Safety Ticks": 1.0,
+        "Rotations": true,
+        "Move Fix": true,
+        "Tool Spoof": true,
+        "Visual Swing": true,
+        "Whitelist": true,
+        "Progress Bar": true
+      }
+    },
+    "Criticals": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Mode": "PACKET",
+        "On Ground Check": true
+      }
+    },
+    "Derp": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Mode": "SERVER",
+        "Pitch": 90.0,
+        "Rotation Speed": 5.0,
+        "Move Fix": true
+      }
+    },
+    "Disabler": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Mode": [
+          "HYPIXEL_INV"
+        ]
+      }
+    },
+    "Discord RPC": {
+      "toggled": true,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Show Server": true,
+        "Show Timestamp": true
+      }
+    },
+    "Eagle": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Delay": 50.0,
+        "Block Check": true,
+        "Direction Check": false,
+        "Sneak Check": true
+      }
+    },
+    "Fake Lag": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Delay": 200.0,
+        "Delay Teleports": true,
+        "Delay Velocity": true,
+        "Delay Entity Movements": true,
+        "Render Lag Pos": true
+      }
+    },
+    "Fast Break": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Speed": 15.0,
+        "Delay": 0.0
+      }
+    },
+    "Fast Use": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Speed": 15.0,
+        "Food Items": true,
+        "Potion Items": true,
+        "Bow Items": true
+      }
+    },
+    "Flight": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Mode": "MOTION",
+        "Motion Speed": 0.9
+      }
+    },
+    "Friends": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Mid-Click Add": true
+      }
+    },
+    "GUI Clicker": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0
+      }
+    },
+    "Hit Select": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Chance": 100.0,
+        "Combo Delay": 50.0,
+        "Reset Timeout": 1500.0,
+        "Predict": true,
+        "Predict Reach": 3.2,
+        "Swing Threshold": 0.15,
+        "Idle Attack": true,
+        "Idle CPS": 2.0
+      }
+    },
+    "Input Fixes": {
+      "toggled": true,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0
+      }
+    },
+    "Inv Move": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Mode": "VANILLA"
+      }
+    },
+    "Item Delays": {
+      "toggled": true,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Delay": 1.0,
+        "Allow Blocks": true,
+        "Allow Projectiles": true
+      }
+    },
+    "Lag Range": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Mode": "LAG",
+        "Min Range": 3.5,
+        "Max Range": 4.2,
+        "Min Delay": 50.0,
+        "Max Delay": 200.0,
+        "Delay Teleports": true,
+        "Delay Velocity": true,
+        "Delay Entity Movements": true,
+        "Only With Kill Aura": true,
+        "Render Lag Pos": true
+      }
+    },
+    "Long Jump": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Fireball": true,
+        "Fireball Mode": "LEGIT",
+        "Mode": "MOSPIXEL",
+        "Delay": 400.0
+      }
+    },
+    "Manager": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Instant": false,
+        "Inv Only": true,
+        "Send Inv Packets": true,
+        "Not Moving": false,
+        "Swap Blocks": true,
+        "Drop Archery": false,
+        "Move Arrows": true,
+        "Drop Food": false,
+        "Drop Shears": true,
+        "Manage Weapon": true,
+        "Manage Pickaxe": true,
+        "Manage Axe": true,
+        "Manage Shovel": true,
+        "Manage Bow": true,
+        "Manage Blocks": true,
+        "Manage Gapple": true,
+        "Manage Potion": true,
+        "Manage Clutch": true,
+        "Manage Projectile": false,
+        "Delay": 0.0,
+        "Weapon Slot": 1.0,
+        "Pickaxe Slot": 2.0,
+        "Axe Slot": 3.0,
+        "Shovel Slot": 4.0,
+        "Bow Slot": 5.0,
+        "Block Slot": 6.0,
+        "Gapple Slot": 7.0,
+        "Potion Slot": 8.0,
+        "Clutch Slot": 9.0,
+        "Projectile Slot": 9.0
+      }
+    },
+    "Minigame Aim": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Game": "ZOMBIE",
+        "Silent": true,
+        "Show Prediction": true,
+        "Show FOV": true,
+        "Auto Heal": true,
+        "Auto Revive": true,
+        "Auto Ammo": false,
+        "Hud": true,
+        "Prediction Scale": 1.0,
+        "Prediction Ticks": 2.0,
+        "Delay": 4.0,
+        "Buffer": 3.0,
+        "FOV": 90.0,
+        "Health": 3.0,
+        "Aimbot Mode": "AUTO_FIRE",
+        "Hitbox": "HITSCAN_HEAD",
+        "Priority": "CLOSEST",
+        "Range": 4.5,
+        "Rotation Speed": 10.0
+      }
+    },
+    "No Fall": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Mode": "MLG"
+      }
+    },
+    "No Slow": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Mode": "VANILLA",
+        "Food Items": true,
+        "Potion Items": true,
+        "Sword Items": true,
+        "Bow Items": true
+      }
+    },
+    "Phase": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Mode": "NORMAL"
+      }
+    },
+    "Refill": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Auto Close": true
+      }
+    },
+    "Regen": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Minimum Health": 15.0,
+        "Speed": 20.0
+      }
+    },
+    "Safe Walk": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0
+      }
+    },
+    "Scaffold": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 47,
+        "Mode": "TELLY",
+        "Hypixel Telly": true,
+        "Telly Straight Ticks": 1.0,
+        "Telly Diagonal Ticks": 1.0,
+        "Telly Jump Down Ticks": 1.0,
+        "Rotations": "NORMAL",
+        "Randomized Speed Min": 10.0,
+        "Randomized Speed Max": 10.0,
+        "Search Algorithm": "NORMAL",
+        "Min Rotation Speed": 10.0,
+        "Max Rotation Speed": 10.0,
+        "Place Delay": 2.0,
+        "Ray Cast": "STRICT",
+        "Swap Mode": "CLIENT",
+        "Sprint Mode": "LEGIT",
+        "Tower Mode": "HYPIXEL",
+        "Tower Move": true,
+        "Move Fix": true,
+        "Auto Jump": true,
+        "Keep Y": true,
+        "Sneak": false,
+        "Sneak Every": 6.0,
+        "Safe Walk": false,
+        "Expand": 0.0,
+        "Block Counter": "BAR",
+        "Auto Disable": false,
+        "Out Of Blocks": "BRAKE"
+      }
+    },
+    "Speed": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 45,
+        "Mode": "BHOP",
+        "Speed": 0.9
+      }
+    },
+    "Sprint": {
+      "toggled": true,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Cancel Invis": false
+      }
+    },
+    "Stasis": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0
+      }
+    },
+    "Stealer": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Instant": false,
+        "Steal Delay": 0.0,
+        "Min Delay": 0.0,
+        "Max Delay": 0.0,
+        "Steal Trash Items": false,
+        "Auto Close": true,
+        "Grab Mouse": false,
+        "Auto Disable": false,
+        "Distance Scaling": false,
+        "Distance Multiplier": 15.0,
+        "Position Scaling": false,
+        "Position Multiplier": 5.0,
+        "Miss Click": false,
+        "Miss Click Chance": 15.0,
+        "Miss Recovery Min": 80.0,
+        "Miss Recovery Max": 220.0
+      }
+    },
+    "Step": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Mode": "VANILLA",
+        "Height": 1.0
+      }
+    },
+    "Target Strafe": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Range": 1.0,
+        "Hold Jump": true
+      }
+    },
+    "Tick Base": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Delay": 20.0,
+        "Only With Kill Aura": true
+      }
+    },
+    "Timer": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Mode": "PULSE",
+        "Time Amount": 1.0,
+        "Time Amount 2": 1.399999976158142
+      }
+    },
+    "Toggle Sounds": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Toggle Sounds": "NURSULTAN"
+      }
+    },
+    "Velocity": {
+      "toggled": true,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Mode": "JUMP",
+        "Ignore On Fire": true,
+        "Velocity X Modifier": 0.0,
+        "Velocity Y Modifier": 1.0,
+        "Velocity Z Modifier": 0.0,
+        "Jump Chance": 100.0,
+        "Jump Only Sprinting": true,
+        "Hard Reset": false,
+        "Reset Strength": 100.0,
+        "Intave Mode": "INTAVE_LATEST",
+        "Reduce": false,
+        "Attack Times": 5.0,
+        "Only Sprinting": true,
+        "Reduce When Can Attack": true
+      }
+    },
+    "W Tap": {
+      "toggled": true,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Chance": 100.0
+      }
+    },
+    "Water Walk": {
+      "toggled": false,
+      "hidden": false,
+      "Properties": {
+        "Keybind": 0,
+        "Mode": "VANILLA"
+      }
+    }
+  },
+  "RotationPreset": {
+    "name": "legit",
+    "data": "MC40Njg3NSwyLjM0Mzc1CjEuMTk3OTA2NSwtNC4wMTA0MTY1CjguMDE1MzIsMS4wNjk1MzA1CjMuNzUsLTQuNjg3NQoyLjkyMzc5NzYsLTEuNDY5MDY5NQotMTYuMDkzNzUsLTcuMjM5NTg0Ci03LjI4ODY2NiwtMy4xMzEwMDI0CjguNzUxODEyLDQuMzc3NDI2CjE2LjA2NzgxNCwtNi41NTQzNTU2Ci0yNi4yNSwyLjgxMjUKLTkuNzgwOTUyLC0wLjU3NzQxNzg1CjIuMDk2NTM3NiwtMy4zMTI0MTgKLTEuNjg1OTU4OSwtMy40NDIwMDEzCjEuNzE4NzUsMy4xMjUKLTIuMzQzNzUsMS44NzUKLTExLjY2ODE2MywtNC4wMjQ0NTgKLTAuMzU0MjI4OTcsNC4zOTc2NDgKLTEyLjI3MTYwMSwtMC41Mjg0NTE5CjIxLjYzMzE0NCwtNC42MTM4ODYKLTEuNzA5MTE0MSwtMi43ODA0MDUKLTguOTA2MjUsMjMuNTkzNzUKOS43NDUzNzcsLTMuNTcyNTMyNwo1LjE1NjI1LC0xLjQwNjI1CjEuMDkzNzUsMTYuODc1CjIuMTk3MTEzLC0yLjU5NjgzNgotMi42Njc1MTEsLTQuMjI1NTU5Ci0xNy4zOTIyNDIsLTMuNjYzMzYwNgowLjE4NDU3Nzk0LDAuMjQxMDA0OTQKNi43MjkxMjYsLTEuMzU3NzY1MgotMi4zMzQ5NjEsOC40OTUxNzYKLTAuMzI3MjQsMi40OTE4MjkK"
+  }
+}

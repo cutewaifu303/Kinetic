@@ -1,0 +1,37 @@
+name: release
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Java setup
+        uses: actions/setup-java@v4
+        with:
+          distribution: "corretto"
+          java-version: 11
+
+      - name: Build and assemble releases (launcher Kinetic.jar + client/ folder, bundled Corretto 8)
+        run: |
+          chmod +x ./gradlew
+          ./gradlew clean release --no-daemon --stacktrace
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/Kinetic-linux.zip
+            dist/Kinetic-windows.zip
+          generate_release_notes: true

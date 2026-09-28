@@ -1,0 +1,156 @@
+package secret.kinetic.modules.impl.render;
+
+import secret.kinetic.api.events.annotations.EventHook;
+import secret.kinetic.api.events.annotations.EventPriority;
+import secret.kinetic.api.events.impl.render.Render2DEvent;
+import secret.kinetic.api.events.impl.render.Shader2DEvent;
+import secret.kinetic.api.properties.impl.ModeProperty;
+import secret.kinetic.managers.impl.ColorManager;
+import secret.kinetic.modules.Module;
+import secret.kinetic.modules.ModuleCategory;
+import secret.kinetic.modules.ModuleInfo;
+import secret.kinetic.utils.render.RenderUtils;
+import secret.kinetic.utils.render.RoundedUtils;
+import net.minecraft.client.gui.ScaledResolution;
+import net.minecraft.client.renderer.GlStateManager;
+import net.minecraft.client.renderer.RenderHelper;
+import net.minecraft.client.renderer.entity.RenderItem;
+import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.item.ItemStack;
+import net.minecraft.util.ResourceLocation;
+
+import java.awt.*;
+
+@ModuleInfo(label = "Hotbar", description = "Renders a custom themed hotbar", category = ModuleCategory.RENDER)
+public class HotbarModule extends Module {
+
+    private final ModeProperty<Mode> mode = new ModeProperty<>("Mode", Mode.KINETIC);
+
+    private enum Mode {
+        KINETIC("Kinetic"),
+        CLASSIC("Classic");
+
+        public final String name;
+
+        Mode(String name) {
+            this.name = name;
+        }
+
+        public String toString() {
+            return name;
+        }
+    }
+
+    private static final Color BG_COLOR = new Color(16, 20, 30, 155);
+    private static final Color HIGHLIGHT_FILL_COLOR = new Color(255, 255, 255, 60);
+    private static final Color TRANSPARENT = new Color(0, 0, 0, 0);
+    private static final float SLOT_SIZE = 20f;
+    private static final float SLOT_RADIUS = 4f;
+    private static final float POSITION_SMOOTHING = 18f;
+    private static final float MAX_DELTA = 0.05f;
+
+    private float highlightX = Float.NaN;
+    private long lastFrameNanos = System.nanoTime();
+
+    @EventHook(EventPriority.VERY_HIGH)
+    public void onRender2D(Render2DEvent event) {
+        renderHotbar();
+    }
+
+    @EventHook(EventPriority.VERY_HIGH)
+    public void onShader2D(Shader2DEvent event) {
+        renderHotbar();
+    }
+
+    public void renderHotbar() {
+        if (!(mc.getRenderViewEntity() instanceof EntityPlayer)) {
+            return;
+        }
+
+        final ScaledResolution sr = new ScaledResolution(mc);
+        final EntityPlayer entityplayer = (EntityPlayer) mc.getRenderViewEntity();
+
+        final long now = System.nanoTime();
+        final float delta = Math.min(MAX_DELTA, (now - lastFrameNanos) / 1_000_000_000f);
+        lastFrameNanos = now;
+
+        final int posX = (int) (sr.getScaledWidth() / 2.0F - 95);
+        final int posY = (int) (sr.getScaledHeight() - 21 - 2f - 18);
+        final int scaleX = 95 * 2;
+        final int scaleY = 22 + 18;
+
+        GlStateManager.enableRescaleNormal();
+        GlStateManager.enableBlend();
+        GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
+
+        if (mode.getValue() == Mode.KINETIC) {
+            RoundedUtils.drawRoundOutline(posX, posY + 18, scaleX, scaleY - 18, 5, -0.4f, BG_COLOR,
+                    ColorManager.getColor());
+        } else if (mode.getValue() == Mode.CLASSIC) {
+            RenderUtils.drawImage(new ResourceLocation("kinetic/gui/textbox.png"), posX + 1, posY + 18, scaleX, scaleY - 18);
+        }
+
+        renderAnimatedHighlight(sr, entityplayer, delta);
+
+        for (int j = 0; j < 9; ++j) {
+            final int k = sr.getScaledWidth() / 2 - 90 + j * 21 - 2;
+            final int l = sr.getScaledHeight() - 16 - 3;
+            renderHotBarItem(j, k, l - 1, mc.timer.renderPartialTicks, entityplayer);
+        }
+
+        GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
+        GlStateManager.disableRescaleNormal();
+        GlStateManager.disableBlend();
+    }
+
+    private void renderAnimatedHighlight(final ScaledResolution sr, final EntityPlayer entityPlayer, final float delta) {
+        final int currentItem = entityPlayer.inventory.currentItem;
+        final int slotX = sr.getScaledWidth() / 2 - 90 + currentItem * 21 - 2;
+        final int slotY = sr.getScaledHeight() - 16 - 3 - 1;
+
+        if (Float.isNaN(highlightX)) {
+            highlightX = slotX;
+        } else {
+            final float smoothing = 1f - (float) Math.exp(-delta * POSITION_SMOOTHING);
+            highlightX += (slotX - highlightX) * smoothing;
+        }
+
+        final float x = highlightX - 2f;
+        final float y = slotY - 2f;
+
+        RoundedUtils.drawCustomRoundedRect(x, y, SLOT_SIZE, SLOT_SIZE, SLOT_RADIUS,
+                true, true, true, true, HIGHLIGHT_FILL_COLOR);
+        RoundedUtils.drawRoundOutline(x, y, SLOT_SIZE, SLOT_SIZE, SLOT_RADIUS, -0.4f,
+                TRANSPARENT, ColorManager.getColor());
+    }
+
+    private void renderHotBarItem(final int index, final int xPos, final int yPos, final float partialTicks, final EntityPlayer entityPlayer) {
+        final ItemStack itemstack = entityPlayer.inventory.mainInventory[index];
+        final RenderItem itemRenderer = mc.getRenderItem();
+
+        if (itemstack == null) {
+            return;
+        }
+
+        final float f = (float) itemstack.animationsToGo - partialTicks;
+
+        if (f > 0.0F) {
+            GlStateManager.pushMatrix();
+            final float f1 = 1.0F + f / 5.0F;
+            GlStateManager.translate((float) (xPos + 8), (float) (yPos + 12), 0.0F);
+            GlStateManager.scale(1.0F / f1, (f1 + 1.0F) / 2.0F, 1.0F);
+            GlStateManager.translate((float) (-(xPos + 8)), (float) (-(yPos + 12)), 0.0F);
+        }
+
+        RenderHelper.enableGUIStandardItemLighting();
+        itemRenderer.renderItemAndEffectIntoGUI(itemstack, xPos, yPos);
+        GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
+
+        if (f > 0.0F) {
+            GlStateManager.popMatrix();
+        }
+
+        itemRenderer.renderItemOverlays(mc.fontRendererObj, itemstack, xPos, yPos);
+        RenderHelper.disableStandardItemLighting();
+    }
+}
