@@ -6,6 +6,7 @@ import net.minecraft.block.Block;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.block.model.BakedQuad;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.client.renderer.texture.TextureUtil;
 import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
 import net.minecraft.client.resources.model.IBakedModel;
@@ -199,7 +200,9 @@ public class BlockModelRenderer
             this.fillQuadBounds(block, bakedquad.getVertexData(), bakedquad.getFace(), afloat, bitset);
             blockmodelrenderer$ambientocclusionface.updateVertexBrightness(p_renderQuadsSmooth_1_, block, p_renderQuadsSmooth_3_, bakedquad.getFace(), afloat, bitset);
 
-            if (bakedquad.getSprite().isEmissive)
+            TextureAtlasSprite sprite = bakedquad.getSprite();
+
+            if (sprite != null && sprite.isEmissive)
             {
                 blockmodelrenderer$ambientocclusionface.setMaxBlockLight();
             }
@@ -384,7 +387,9 @@ public class BlockModelRenderer
                 p_renderQuadsFlat_5_ = bitset.get(0) ? block.getMixedBrightnessForBlock(p_renderQuadsFlat_1_, p_renderQuadsFlat_3_.offset(bakedquad.getFace())) : block.getMixedBrightnessForBlock(p_renderQuadsFlat_1_, p_renderQuadsFlat_3_);
             }
 
-            if (bakedquad.getSprite().isEmissive)
+            TextureAtlasSprite sprite = bakedquad.getSprite();
+
+            if (sprite != null && sprite.isEmissive)
             {
                 p_renderQuadsFlat_5_ |= 240;
             }

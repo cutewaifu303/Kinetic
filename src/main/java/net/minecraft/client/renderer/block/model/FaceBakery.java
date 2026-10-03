@@ -46,7 +46,7 @@ public class FaceBakery
             Reflector.call(Reflector.ForgeHooksClient_fillNormal, new Object[] {aint, enumfacing});
         }
 
-        return new BakedQuad(aint, p_makeBakedQuad_3_.tintIndex, enumfacing);
+        return new BakedQuad(aint, p_makeBakedQuad_3_.tintIndex, enumfacing, p_makeBakedQuad_4_);
     }
 
     private int[] makeQuadVertexData(BlockPartFace p_makeQuadVertexData_1_, TextureAtlasSprite p_makeQuadVertexData_2_, EnumFacing p_makeQuadVertexData_3_, float[] p_makeQuadVertexData_4_, ITransformation p_makeQuadVertexData_5_, BlockPartRotation p_makeQuadVertexData_6_, boolean p_makeQuadVertexData_7_, boolean p_makeQuadVertexData_8_)

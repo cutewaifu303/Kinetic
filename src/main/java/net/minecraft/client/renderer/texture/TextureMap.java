@@ -952,7 +952,7 @@ public class TextureMap extends AbstractTexture implements ITickableTextureObjec
             int i = (int)(p_getIconByUV_1_ / this.iconGridSizeU);
             int j = (int)(p_getIconByUV_3_ / this.iconGridSizeV);
             int k = j * this.iconGridCountX + i;
-            return k >= 0 && k <= this.iconGrid.length ? this.iconGrid[k] : null;
+            return k >= 0 && k < this.iconGrid.length ? this.iconGrid[k] : null;
         }
     }
 
