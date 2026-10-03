@@ -51,7 +51,7 @@ public class AuraModule extends Module {
 
         this is honestly the only client that uses these attack methods to date, and it's kinda sad.
         this all results in beating every other Hypixel client (paid ones and clients with auto blocks included)
-        in a hvh with even using fake auto block on Yuri.
+        in a hvh with even using fake auto block on Kinetic.
 
         -unlegit
     */
