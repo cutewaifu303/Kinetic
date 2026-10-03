@@ -29,6 +29,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -44,7 +45,10 @@ final class LocaltsTab extends AltTab {
     private static final int MAX_AMOUNT = 25;
 
     private final CustomTextBox apiKeyField;
+    private final CustomTextBox searchField;
+    private final List<Product> allProducts = new ArrayList<>();
     private final List<Product> products = new ArrayList<>();
+    private String filterQuery = "";
 
     private String apiKey = "";
     private User user;
@@ -75,6 +79,9 @@ final class LocaltsTab extends AltTab {
         apiKeyField.setMasked(true);
         apiKey = loadApiKey();
         apiKeyField.setText(apiKey);
+
+        searchField = new CustomTextBox(0, 0, 0, FIELD_HEIGHT);
+        searchField.setPlaceholder("Search products...");
     }
 
     @Override
@@ -126,8 +133,11 @@ final class LocaltsTab extends AltTab {
         tipsY = statusY + fontHeight + PADDING * 2;
 
         int dividerY = listPanelY + PADDING + fontHeight + 10;
+        searchField.xPosition = listPanelX + PADDING;
+        searchField.yPosition = dividerY + PADDING;
+        searchField.setWidth(listPanelWidth - PADDING * 2);
         listX = listPanelX + PADDING;
-        listY = dividerY + PADDING;
+        listY = searchField.yPosition + FIELD_HEIGHT + PADDING;
         listWidth = listPanelWidth - PADDING * 2 - SCROLLBAR_WIDTH - 8;
         listHeight = listPanelY + listPanelHeight - listY - PADDING;
         visibleRows = Math.max(1, listHeight / (ROW_HEIGHT + ROW_PADDING));
@@ -231,12 +241,16 @@ final class LocaltsTab extends AltTab {
 
         int dividerY = listPanelY + PADDING + fontHeight + 10;
         Gui.drawRect(listPanelX + PADDING, dividerY, listPanelX + listPanelWidth - PADDING, dividerY + 1, RenderUtils.withAlpha(Color.WHITE, 20));
+        searchField.drawTextBox();
 
         if (products.isEmpty()) {
             float centerX = listX + listWidth / 2f;
             float centerY = listY + listHeight / 2f - fontHeight;
-            regular.drawCenteredStringWithShadow(user == null ? "Connect to load products" : "No products in stock", centerX, centerY, Color.WHITE.getRGB());
-            regular.drawCenteredStringWithShadow("Click a product, pick an amount, then buy", centerX, centerY + fontHeight + 4, 0x999999);
+            String title = user == null ? "Connect to load products"
+                    : allProducts.isEmpty() ? "No products in stock" : "No products match your search";
+            regular.drawCenteredStringWithShadow(title, centerX, centerY, Color.WHITE.getRGB());
+            regular.drawCenteredStringWithShadow(allProducts.isEmpty() ? "Click a product, pick an amount, then buy" : "Try a different search term",
+                    centerX, centerY + fontHeight + 4, 0x999999);
             return;
         }
 
@@ -321,6 +335,8 @@ final class LocaltsTab extends AltTab {
     @Override
     boolean mouseClicked(int mouseX, int mouseY, int mouseButton) {
         apiKeyField.mouseClicked(mouseX, mouseY, mouseButton);
+        searchField.mouseClicked(mouseX, mouseY, mouseButton);
+        if (searchField.isFocused()) return true;
 
         if (connectButton.contains(mouseX, mouseY)) {
             connect();
@@ -382,6 +398,8 @@ final class LocaltsTab extends AltTab {
     @Override
     void keyTyped(char typedChar, int keyCode) {
         apiKeyField.keyTyped(typedChar, keyCode);
+        searchField.keyTyped(typedChar, keyCode);
+        updateSearch();
         if (apiKeyField.isFocused() && keyCode == Keyboard.KEY_RETURN) connect();
     }
 
@@ -408,10 +426,9 @@ final class LocaltsTab extends AltTab {
                     apiKey = key;
                     saveApiKey(key);
                     user = me;
-                    products.clear();
-                    for (Product p : fetched) if (p.stock > 0) products.add(p); 
                     selectedProduct = -1;
                     scrollOffset = 0;
+                    setProducts(fetched);
                     setStatus("Connected as " + me.username + "!", false);
                     busy = false;
                 });
@@ -517,17 +534,52 @@ final class LocaltsTab extends AltTab {
             List<Product> fetched = backend.getProducts(key);
             mc.addScheduledTask(() -> {
                 user = me;
-                String selectedId = selectedProduct >= 0 && selectedProduct < products.size() ? products.get(selectedProduct).id : null;
-                products.clear();
-                for (Product p : fetched) if (p.stock > 0) products.add(p); 
-                selectedProduct = -1;
-                for (int i = 0; i < products.size(); i++) {
-                    if (products.get(i).id.equals(selectedId)) selectedProduct = i;
-                }
-                scrollOffset = Math.min(scrollOffset, maxScroll());
+                setProducts(fetched);
             });
         } catch (Exception ignored) {
         }
+    }
+
+    private void setProducts(List<Product> fetched) {
+        allProducts.clear();
+        for (Product p : fetched) if (p.stock > 0) allProducts.add(p);
+        allProducts.sort(Comparator.comparingDouble(p -> p.priceInCredits));
+        applyFilter();
+    }
+
+    private void updateSearch() {
+        String query = searchField.getText().trim().toLowerCase(Locale.ROOT);
+        if (query.equals(filterQuery)) return;
+        scrollOffset = 0;
+        applyFilter();
+    }
+
+    private void applyFilter() {
+        filterQuery = searchField.getText().trim().toLowerCase(Locale.ROOT);
+        String selectedId = selectedProduct >= 0 && selectedProduct < products.size() ? products.get(selectedProduct).id : null;
+        products.clear();
+        for (Product p : allProducts) if (matchesFilter(p)) products.add(p);
+        selectedProduct = -1;
+        if (selectedId != null) {
+            for (int i = 0; i < products.size(); i++) {
+                if (products.get(i).id.equals(selectedId)) {
+                    selectedProduct = i;
+                    break;
+                }
+            }
+        }
+        scrollOffset = Math.min(scrollOffset, maxScroll());
+    }
+
+    private boolean matchesFilter(Product product) {
+        if (filterQuery.isEmpty()) return true;
+        StringBuilder text = new StringBuilder()
+                .append(product.name).append(' ')
+                .append(product.category).append(' ')
+                .append(product.description).append(' ')
+                .append(product.type);
+        for (String tag : product.tags) text.append(' ').append(tag);
+        return text.toString().toLowerCase(Locale.ROOT).contains(filterQuery);
     }
 
     private void saveDelivery(Product product, Order order) {

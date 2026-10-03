@@ -33,6 +33,7 @@ import net.minecraft.item.ItemBlock;
 import net.minecraft.item.ItemStack;
 import net.minecraft.network.play.client.C0APacketAnimation;
 import net.minecraft.network.play.server.S02PacketChat;
+import net.minecraft.potion.Potion;
 import net.minecraft.util.*;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.util.vector.Vector2f;
@@ -48,7 +49,6 @@ public final class ScaffoldModule extends Module {
     public static final ModeProperty<Rotations> rotations = new ModeProperty<>("Rotations", Rotations.NORMAL);
     private final NumberProperty randomizedSpeedMin = new NumberProperty("Randomized Speed Min", 3, 0, 10, 0.5f, () -> rotations.getValue() == Rotations.RANDOMIZED);
     private final NumberProperty randomizedSpeedMax = new NumberProperty("Randomized Speed Max", 7, 0, 10, 0.5f, () -> rotations.getValue() == Rotations.RANDOMIZED);
-    public final ModeProperty<SearchAlgorithm> searchAlgorithm = new ModeProperty<>("Search Algorithm", SearchAlgorithm.NORMAL, () -> rotations.getValue() != Rotations.OLD);
     private final NumberProperty minRotationSpeed = new NumberProperty("Min Rotation Speed", 3, 0, 10, 0.5f);
     private final NumberProperty maxRotationSpeed = new NumberProperty("Max Rotation Speed", 7, 0, 10, 0.5f);
     private final NumberProperty placeDelay = new NumberProperty("Place Delay", 0, 0, 10, 1);
@@ -213,9 +213,7 @@ public final class ScaffoldModule extends Module {
         if (autoDisable.getValue()) {
             for (Entity entity : mc.theWorld.loadedEntityList) {
                 if (entity instanceof EntityFireball && entity.getDistanceToEntity(mc.thePlayer) < 6) {
-                    if (!Kinetic.INSTANCE.getModuleManager().getModule(AntiFireballModule.class).isEnabled()) {
-                        RotationManager.setRotations(RotationUtils.calculate(entity), 10, RotationManager.MovementFix.NORMAL);
-                    }
+                    RotationManager.setRotations(RotationUtils.calculate(entity), 10, RotationManager.MovementFix.NORMAL);
                     if (entity.getDistanceToEntity(mc.thePlayer) <= 5) {
                         Kinetic.INSTANCE.getNotificationHandler().pop(getLabel(), "Disabled, fireball detected.");
                         this.toggle();
@@ -256,7 +254,7 @@ public final class ScaffoldModule extends Module {
             float moveYaw = RotationUtils.getMovementYaw();
             float offsetYaw = moveYaw + 50.0f;
             float yawDelta = Math.abs(MathHelper.wrapAngleTo180_float(offsetYaw - targetYaw));
-            if (this.placeTimer == (yawDelta > 60.0f ? 8 : 9) && !userJumpDown() && mc.thePlayer.onGround) {
+            if (this.placeTimer == (yawDelta > 60.0f ? 8 : 9) && !mc.gameSettings.keyBindJump.isKeyDown() && mc.thePlayer.onGround) {
                 targetYaw = moveYaw + 50.0f;
             }
             if (mc.thePlayer.onGround) {
@@ -264,8 +262,7 @@ public final class ScaffoldModule extends Module {
             }
         }
 
-        final boolean userJump = userJumpDown();
-        if (userJump
+        if (mc.gameSettings.keyBindJump.isKeyDown()
                 || (mc.thePlayer.onGround && mc.thePlayer.posY < startY)
                 || (mc.thePlayer.onGround && mc.thePlayer.posY > startY && mc.thePlayer.onGroundTicks <= 1)
                 || (mc.thePlayer.onGround && Math.abs(mc.thePlayer.posY - startY) > 0.5 && !MoveUtils.isMoving())) {
@@ -291,9 +288,9 @@ public final class ScaffoldModule extends Module {
                 }
             }
 
-            final boolean sameY = (((keepY.getValue() && !userJump) ||
+            final boolean sameY = (((keepY.getValue() && !mc.gameSettings.keyBindJump.isKeyDown()) ||
                     Kinetic.INSTANCE.getModuleManager().getModule(SpeedModule.class).isEnabled()
-                            && !userJump) && MoveUtils.isMoving()) && Math.abs(mc.thePlayer.posY - startY) <= 3.0;
+                            && !mc.gameSettings.keyBindJump.isKeyDown()) && MoveUtils.isMoving()) && Math.abs(mc.thePlayer.posY - startY) <= 3.0;
 
             final int blockSlot = ScaffoldUtils.findPreferredBlockSlot();
             if (blockSlot == -1) {
@@ -343,8 +340,6 @@ public final class ScaffoldModule extends Module {
             blockFace = position.add(enumFacing.getOffset().xCoord, enumFacing.getOffset().yCoord, enumFacing.getOffset().zCoord);
 
             if (blockFace == null || enumFacing.getEnumFacing() == null) return;
-
-            if (AntiFireballModule.holdsRotations()) return;
 
             this.doRotations();
 
@@ -418,7 +413,7 @@ public final class ScaffoldModule extends Module {
                 tellyNoPlace = true;
             }
         } else if (!hypixelTelly.getValue()) {
-            if (userJumpDown()) {
+            if (mc.gameSettings.keyBindJump.isKeyDown()) {
                 if (mc.thePlayer.offGroundTicks >= tellyJumpDownTicks.getValue().intValue()) {
                     tellyNoPlace = false;
                 }
@@ -432,19 +427,9 @@ public final class ScaffoldModule extends Module {
                 }
             }
         } else {
-            if (mc.thePlayer.offGroundTicks <= 3) {
+            if (mc.thePlayer.offGroundTicks <= (isDiagonal() || mc.gameSettings.keyBindJump.isKeyDown() ? 3 : 3)) {
                 tellyNoPlace = false;
             }
-        }
-    }
-
-    private static boolean userJumpDown() {
-        int code = mc.gameSettings.keyBindJump.getKeyCode();
-        if (code == 0) return false;
-        try {
-            return code < 0 ? org.lwjgl.input.Mouse.isButtonDown(code + 100) : Keyboard.isKeyDown(code);
-        } catch (RuntimeException e) {
-            return false;
         }
     }
 
@@ -482,8 +467,7 @@ public final class ScaffoldModule extends Module {
                 mc.entityRenderer.getMouseOver(1);
                 if (canPlace && !mc.gameSettings.keyBindPickBlock.isKeyDown()) {
                     if (mc.objectMouseOver.sideHit != enumFacing.getEnumFacing() || !mc.objectMouseOver.getBlockPos().equals(blockFace)) {
-                        ScaffoldUtils.computeNormalRotations(blockFace, enumFacing, target,
-                                searchAlgorithm.getValue(), rayCast.getValue() == RayCast.STRICT);
+                        ScaffoldUtils.computeNormalRotations(blockFace, enumFacing, target, SearchAlgorithm.NORMAL, rayCast.getValue() == RayCast.STRICT);
                     }
                 }
                 break;
@@ -491,8 +475,7 @@ public final class ScaffoldModule extends Module {
                 mc.entityRenderer.getMouseOver(1);
                 if (canPlace && !mc.gameSettings.keyBindPickBlock.isKeyDown()) {
                     if (mc.objectMouseOver.sideHit != enumFacing.getEnumFacing() || !mc.objectMouseOver.getBlockPos().equals(blockFace)) {
-                        ScaffoldUtils.computeNormalRotations(blockFace, enumFacing, target,
-                                searchAlgorithm.getValue(), rayCast.getValue() == RayCast.STRICT);
+                        ScaffoldUtils.computeNormalRotations(blockFace, enumFacing, target, SearchAlgorithm.NORMAL, rayCast.getValue() == RayCast.STRICT);
                     }
                 }
                 directionalChange++;
@@ -554,8 +537,7 @@ public final class ScaffoldModule extends Module {
                 if (canPlace && !mc.gameSettings.keyBindPickBlock.isKeyDown()) {
                     if (mc.objectMouseOver.sideHit != enumFacing.getEnumFacing() || !mc.objectMouseOver.getBlockPos().equals(blockFace)) {
                         if (!hypixelTelly.getValue()) {
-                            ScaffoldUtils.computeNormalRotations(blockFace, enumFacing, target,
-                                    searchAlgorithm.getValue(), rayCast.getValue() == RayCast.STRICT);
+                            ScaffoldUtils.computeNormalRotations(blockFace, enumFacing, target, SearchAlgorithm.NORMAL, rayCast.getValue() == RayCast.STRICT);
                         } else {
                             ScaffoldUtils.computeWatchdog3Rotations(blockFace, enumFacing, target, rayCast.getValue() == RayCast.STRICT);
                         }
@@ -563,21 +545,21 @@ public final class ScaffoldModule extends Module {
                 }
 
                 mc.entityRenderer.getMouseOver(1);
-                if (mc.thePlayer.onGround && MoveUtils.isMoving() && (userJumpDown() || !mc.thePlayer.isSprinting())) {
+                if (mc.thePlayer.onGround && (!mc.thePlayer.isSprinting() || mc.gameSettings.keyBindJump.isKeyDown()) && MoveUtils.isMoving() && (mc.gameSettings.keyBindJump.isKeyDown() || !mc.thePlayer.isSprinting())) {
                     if (hypixelTelly.getValue()) {
                         rotSpeed = 10.0f;
                     } else {
                         rotSpeed = 20.0f;
                     }
-                        target[0] = RotationUtils.getMovementYaw();
+                        target[0] = mc.thePlayer.rotationYaw;
                 } else {
                     if (hypixelTelly.getValue()) {
-                        rotSpeed = isDiagonal() || userJumpDown() ? 4.5f : 1.9f;
+                        rotSpeed = isDiagonal() ? 5.2f : mc.gameSettings.keyBindJump.isKeyDown() ? 3.25f : 2.5f;
                     }
                 }
                 break;
             case HYPIXEL:
-                rotSpeed = isDiagonal() || userJumpDown() ? 5.2f : 4.8f;
+                rotSpeed = isDiagonal() || mc.gameSettings.keyBindJump.isKeyDown() ? 6.5f : 4.8f;
                 if (canPlace && !mc.gameSettings.keyBindPickBlock.isKeyDown()) {
                     ScaffoldUtils.computeWatchdog3Rotations(blockFace, enumFacing, target, rayCast.getValue() == RayCast.STRICT);
                 }
@@ -689,7 +671,7 @@ public final class ScaffoldModule extends Module {
     }
 
     public void tower() {
-        if (towerMode.getValue() == TowerMode.NONE || !userJumpDown() || !PlayerUtils.isBlockUnder(2))
+        if (towerMode.getValue() == TowerMode.NONE || !mc.gameSettings.keyBindJump.isKeyDown() || !PlayerUtils.isBlockUnder(2))
             return;
         if (!towerMove.getValue() && MoveUtils.isMoving()) return;
 
@@ -706,6 +688,10 @@ public final class ScaffoldModule extends Module {
                 mc.thePlayer.motionY = 0.42;
                 break;
             case HYPIXEL:
+                if (mc.thePlayer.isPotionActive(Potion.jump)) {
+                    return;
+                }
+
                 if (mc.thePlayer.onGround && !MoveUtils.enoughMovementForSprinting()) {
                     mc.thePlayer.jump();
                 }
@@ -729,7 +715,7 @@ public final class ScaffoldModule extends Module {
     }
 
     private void renderBlockCounter() {
-        if (blockCounter.getValue() == BlockCounter.NONE || secret.kinetic.modules.impl.render.StatusHudModule.isActive()) {
+        if (blockCounter.getValue() == BlockCounter.NONE) {
             counterAlpha = 0f;
             lastRenderTime = -1L;
             ProgressBarManager.remove(barEntry);

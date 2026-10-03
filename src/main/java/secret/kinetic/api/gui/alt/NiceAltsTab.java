@@ -33,6 +33,7 @@ import java.io.PrintWriter;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
@@ -76,7 +77,7 @@ final class NiceAltsTab extends AltTab {
     private static final Color GOOD = new Color(90, 210, 130);
     private static final Pattern SERVER = Pattern.compile("^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:\\d{1,5})?$");
 
-    private final CustomTextBox apiKeyField, serverField;
+    private final CustomTextBox apiKeyField, serverField, searchField;
     private String apiKey;
 
     private Account account;
@@ -95,6 +96,7 @@ final class NiceAltsTab extends AltTab {
     private boolean statusIsError;
 
     private int productScroll, orderScroll;
+    private String lastProductQuery = "";
     private int lastMouseX, lastMouseY;
     private final List<Hit> hits = new ArrayList<>();
 
@@ -122,6 +124,9 @@ final class NiceAltsTab extends AltTab {
 
         serverField = new CustomTextBox(0, 0, 0, FIELD_HEIGHT);
         serverField.setPlaceholder("play.example.com[:port]");
+
+        searchField = new CustomTextBox(0, 0, 0, FIELD_HEIGHT);
+        searchField.setPlaceholder("Search products...");
     }
 
     @Override
@@ -211,8 +216,11 @@ final class NiceAltsTab extends AltTab {
         reloadButton = new Rect().set(listRight - smallButtonWidth("Loading..."), listPanelY + PADDING - 5, smallButtonWidth("Loading..."), SMALL_BUTTON);
 
         int dividerY = listPanelY + PADDING + fontHeight + 10;
+        searchField.xPosition = listPanelX + PADDING;
+        searchField.yPosition = dividerY + PADDING;
+        searchField.setWidth(listPanelWidth - PADDING * 2);
         productsX = listPanelX + PADDING;
-        productsY = dividerY + PADDING;
+        productsY = searchField.yPosition + FIELD_HEIGHT + PADDING;
         productsWidth = listPanelWidth - PADDING * 2;
         int listBottom = listPanelY + listPanelHeight - PADDING;
         int stride = PRODUCT_ROW + ROW_GAP;
@@ -324,6 +332,7 @@ final class NiceAltsTab extends AltTab {
 
         int dividerY = listPanelY + PADDING + fontHeight + 10;
         Gui.drawRect(listPanelX + PADDING, dividerY, listPanelX + listPanelWidth - PADDING, dividerY + 1, RenderUtils.withAlpha(Color.WHITE, 20));
+        searchField.drawTextBox();
 
         drawProducts(mouseX, mouseY);
 
@@ -336,9 +345,20 @@ final class NiceAltsTab extends AltTab {
 
     
     private java.util.List<String> visibleIds() {
+        String query = searchField.getText().trim().toLowerCase(Locale.ROOT);
         java.util.List<String> ids = new java.util.ArrayList<>();
         for (String id : NiceAltsClient.PRODUCT_IDS) {
-            if (stock == null || stock.stockOf(id) > 0) ids.add(id);
+            if (stock != null && stock.stockOf(id) <= 0) continue;
+            if (!query.isEmpty()
+                    && !NiceAltsClient.productName(id).toLowerCase(Locale.ROOT).contains(query)
+                    && !id.toLowerCase(Locale.ROOT).contains(query)) continue;
+            ids.add(id);
+        }
+        if (stock != null) {
+            ids.sort(Comparator.comparingDouble(id -> {
+                double price = stock.priceOf(id);
+                return price > 0 ? price : Double.MAX_VALUE;
+            }));
         }
         return ids;
     }
@@ -355,6 +375,15 @@ final class NiceAltsTab extends AltTab {
                     productsX + productsWidth / 2f, productsY + productsHeight / 2f - regular.getHeight() / 2f, 0x999999);
             return;
         }
+
+        if (ids.isEmpty()) {
+            regular.drawCenteredStringWithShadow(searchField.getText().trim().isEmpty() ? "No products in stock" : "No products match your search",
+                    productsX + productsWidth / 2f, productsY + productsHeight / 2f - regular.getHeight() / 2f, 0x999999);
+            return;
+        }
+
+        int maxProductScroll = Math.max(0, ids.size() - productRows);
+        if (productScroll > maxProductScroll) productScroll = maxProductScroll;
 
         int buttonWidth = 0;
         for (String label : new String[]{"Buy", "Confirm", "Sold out", "Low balance", "Wait 0:00", "Working..."}) {
@@ -514,6 +543,8 @@ final class NiceAltsTab extends AltTab {
     boolean mouseClicked(int mouseX, int mouseY, int mouseButton) {
         apiKeyField.mouseClicked(mouseX, mouseY, mouseButton);
         serverField.mouseClicked(mouseX, mouseY, mouseButton);
+        searchField.mouseClicked(mouseX, mouseY, mouseButton);
+        if (searchField.isFocused()) return true;
         if (mouseButton != 0) return false;
 
         if (connectButton.contains(mouseX, mouseY)) {
@@ -563,6 +594,12 @@ final class NiceAltsTab extends AltTab {
     void keyTyped(char typedChar, int keyCode) {
         apiKeyField.keyTyped(typedChar, keyCode);
         serverField.keyTyped(typedChar, keyCode);
+        searchField.keyTyped(typedChar, keyCode);
+        String query = searchField.getText().trim().toLowerCase(Locale.ROOT);
+        if (!query.equals(lastProductQuery)) {
+            lastProductQuery = query;
+            productScroll = 0;
+        }
         if (keyCode == Keyboard.KEY_RETURN) {
             if (apiKeyField.isFocused()) connect();
             else if (serverField.isFocused()) customPurchase();

@@ -1561,21 +1561,36 @@ public final class KineticLauncher {
         String javaHome = System.getProperty("java.home");
         if (javaHome != null) {
             File current = new File(javaHome, "bin/" + javaBinary());
-            if (current.isFile()) return current;
+            if (current.isFile() && isJava8(current)) return current;
         }
         String envHome = System.getenv("JAVA_HOME");
         if (envHome != null) {
             File fromEnv = new File(envHome, "bin/" + javaBinary());
-            if (fromEnv.isFile()) return fromEnv;
+            if (fromEnv.isFile() && isJava8(fromEnv)) return fromEnv;
         }
         String path = System.getenv("PATH");
         if (path != null) {
             for (String entry : path.split(File.pathSeparator)) {
                 File candidate = new File(entry, javaBinary());
-                if (candidate.isFile()) return candidate;
+                if (candidate.isFile() && isJava8(candidate)) return candidate;
             }
         }
         return null;
+    }
+
+    private static boolean isJava8(File java) {
+        try {
+            Process process = new ProcessBuilder(java.getAbsolutePath(), "-version").redirectErrorStream(true).start();
+            StringBuilder output = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) output.append(line).append('\n');
+            }
+            process.waitFor();
+            return output.toString().contains("version \"1.8");
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private static boolean isOnPath(String binary) {
