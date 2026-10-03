@@ -16,7 +16,7 @@ Everything runs locally. Configs are plain JSON files in `Kinetic/` next to the 
 
 ## What is in it
 
-- **Combat**: Aura with seek / swing / attack / block ranges, min/max CPS, Simulate Mouse Clicks (real left clicks), Normal / ML / None rotations, ray cast and move fix; Auto Block modes Fake, Vanilla, NCP, Hypixel (server-state tracked) and Legit; Velocity, Criticals, Hit Select, Bow Aimbot, Back Track, Auto Pot, Auto Projectile and more.
+- **Combat**: Aura with seek / swing / attack / block ranges, min/max CPS, Simulate Mouse Clicks (real left clicks), Normal / ML / None rotations with aim point, smart rotation and bruteforce visibility, ray cast and move fix; Auto Block modes Fake, Vanilla, NCP, Hypixel (server-state tracked) and Legit; Velocity, Criticals, Hit Select, Bow Aimbot, Back Track, Auto Pot, Auto Projectile and more.
 - **Movement**: Speed, Flight, No Slow, Scaffold (Telly, Hypixel Telly, sprint cancel on yaw mismatch), Timer, Target Strafe and the usual bypasses for Watchdog, Polar and Grim.
 - **Visuals**: liquid glass HUD (mod list, keybinds, session, media player), ESP, name tags, animations with block poses, motion blur, shader skies, sound and image renderer, **Kill FX** (shockwaves, light pillar, shards, souls, vortex, rune ring, screen flash and combo kill text in the theme colours) plus the kill impact distortion.
 - **Themes**: Marin Kitagawa by default, the Kinetic red, Ichika, Nino, Miku, Yotsuba and Itsuki with character art, Israel and a long list of colour presets.
