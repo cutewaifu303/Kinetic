@@ -854,7 +854,20 @@ public class Minecraft implements IThreadListener, IPlayerUsage
             guiScreenIn = new GuiGameOver();
         }
 
-        if (guiScreenIn instanceof KineticMenu)
+        // the Sigma theme swaps in its own Jello main menu and alt manager everywhere these screens get opened
+        if (secret.kinetic.utils.render.KineticImage.isSigmaTheme())
+        {
+            if (guiScreenIn instanceof KineticMenu)
+            {
+                guiScreenIn = new secret.kinetic.api.gui.sigma.SigmaMainMenu();
+            }
+            else if (guiScreenIn instanceof secret.kinetic.api.gui.alt.KineticAltMenu && !((secret.kinetic.api.gui.alt.KineticAltMenu) guiScreenIn).keepClassic)
+            {
+                guiScreenIn = new secret.kinetic.api.gui.sigma.SigmaAltManager(this.currentScreen instanceof secret.kinetic.api.gui.sigma.SigmaAltManager ? null : this.currentScreen);
+            }
+        }
+
+        if (guiScreenIn instanceof KineticMenu || guiScreenIn instanceof secret.kinetic.api.gui.sigma.SigmaMainMenu)
         {
             this.gameSettings.showDebugInfo = false;
             this.ingameGUI.getChatGUI().clearChatMessages();

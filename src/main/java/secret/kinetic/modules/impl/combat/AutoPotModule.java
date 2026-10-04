@@ -88,12 +88,6 @@ public final class AutoPotModule extends Module {
     }
 
     private void startAiming(int slot) {
-        AuraModule aura = Kinetic.INSTANCE.getModuleManager().getModule(AuraModule.class);
-        if (aura.isEnabled() && AuraModule.target != null) {
-            AuraModule.canAttack = false;
-        }
-        AuraModule.rotationOverride = true;
-
         aiming = true;
         aimSlot = slot;
         aimTicks = 0;
@@ -121,11 +115,6 @@ public final class AutoPotModule extends Module {
     }
 
     private void stopAiming() {
-        AuraModule.rotationOverride = false;
-        AuraModule aura = Kinetic.INSTANCE.getModuleManager().getModule(AuraModule.class);
-        if (aura.isEnabled() && AuraModule.target != null) {
-            AuraModule.canAttack = true;
-        }
         aiming = false;
         aimSlot = -1;
         aimTicks = 0;

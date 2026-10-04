@@ -10,11 +10,7 @@ import secret.kinetic.api.properties.Property;
 import secret.kinetic.api.properties.impl.ModeProperty;
 import secret.kinetic.api.properties.impl.MultiModeProperty;
 import secret.kinetic.api.properties.impl.NumberProperty;
-import secret.kinetic.managers.impl.BadPacketsManager;
-import secret.kinetic.managers.impl.RotationLearnerManager;
-import secret.kinetic.managers.impl.RotationManager;
-import secret.kinetic.managers.impl.SlotManager;
-import secret.kinetic.managers.impl.TargetManager;
+import secret.kinetic.managers.impl.*;
 import secret.kinetic.modules.Module;
 import secret.kinetic.modules.ModuleCategory;
 import secret.kinetic.modules.ModuleInfo;
@@ -23,11 +19,11 @@ import secret.kinetic.utils.client.MathUtils;
 import secret.kinetic.utils.client.TimerUtils;
 import secret.kinetic.utils.player.InvUtils;
 import secret.kinetic.utils.player.PlayerUtils;
-import secret.kinetic.utils.player.RayCastUtils;
 import secret.kinetic.utils.player.RotationUtils;
 import secret.kinetic.utils.player.packet.PacketUtils;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityLivingBase;
+import net.minecraft.item.ItemStack;
 import net.minecraft.network.play.client.C07PacketPlayerDigging;
 import net.minecraft.network.play.client.C08PacketPlayerBlockPlacement;
 import net.minecraft.network.play.client.C09PacketHeldItemChange;
@@ -36,6 +32,7 @@ import org.lwjgl.util.vector.Vector2f;
 
 import java.security.SecureRandom;
 import java.util.Arrays;
+import java.util.LinkedList;
 
 @ModuleInfo(label = "Aura", description = "Automatically attacks entities around you", category = ModuleCategory.COMBAT)
 public class AuraModule extends Module {
@@ -71,9 +68,6 @@ public class AuraModule extends Module {
     private final NumberProperty blockOnHurtTicks = new NumberProperty("Block On Hurt Ticks", 4, 0, 10, 1, onlyBlockIfHurt::getValue);
     public static final Property<Boolean> throughWalls = new Property<>("Through Walls", false);
     public static ModeProperty<Rotations> rotations = new ModeProperty<>("Rotations", Rotations.NORMAL);
-    public static final ModeProperty<AimPoint> aimPoint = new ModeProperty<>("Aim Point", AimPoint.NEAREST, () -> rotations.getValue() != Rotations.NONE);
-    private final Property<Boolean> smartRotation = new Property<>("Smart Rotation", true, () -> rotations.getValue() != Rotations.NONE);
-    private final Property<Boolean> bruteforce = new Property<>("Bruteforce", true, () -> rotations.getValue() != Rotations.NONE);
     private final NumberProperty minRotSpeed = new NumberProperty("Min Rotation Speed", 3, 0.1, 10, 0.1f);
     private final NumberProperty maxRotSpeed = new NumberProperty("Max Rotation Speed", 7, 0.1, 10, 0.1f);
     private final NumberProperty bodyEase = new NumberProperty("Body Ease", 0.2, 0.01, 1.0, 0.01, () -> rotations.getValue() == Rotations.ML);
@@ -138,21 +132,6 @@ public class AuraModule extends Module {
         }
     }
 
-    public enum AimPoint {
-        NEAREST("Nearest"), HEAD("Head"), TORSO("Torso"), LEGS("Legs");
-
-        public final String name;
-
-        AimPoint(String name) {
-            this.name = name;
-        }
-
-        @Override
-        public String toString() {
-            return name;
-        }
-    }
-
     public static EntityLivingBase target;
     public static boolean autoBlocking = false;
     public static boolean canAttack = true;
@@ -164,7 +143,6 @@ public class AuraModule extends Module {
     private EntityLivingBase lastTarget;
     private Vec3 smoothedBodyPoint;
     private static final TimerUtils blockTimer = new TimerUtils();
-    private static final double RANGE_EPSILON = 0.006;
 
     @EventHook
     public void onPreUpdate(PreUpdateEvent event) {
@@ -178,7 +156,6 @@ public class AuraModule extends Module {
         }
 
         TargetManager.setTargets(targets.getValue());
-        TargetManager.setSeekRange((float) Math.max(seekRange.getValue(), Math.max(swingRange.getValue(), blockRange.getValue()) + 0.5));
         target = TargetManager.getTarget();
 
         if (target != null && !throughWalls.getValue() && !PlayerUtils.canSeeEntity(target)) {
@@ -211,7 +188,8 @@ public class AuraModule extends Module {
             return;
         }
 
-        attack();
+        // attack after this tick's C03 went out, so the server checks the C02 against the rotation we aimed with
+        attack(event);
 
         if (target == null) return;
 
@@ -256,111 +234,13 @@ public class AuraModule extends Module {
         }
 
         float rotSpeed = (float) MathUtils.getRandom(minRotSpeed.getValue(), maxRotSpeed.getValue());
-        Vector2f rotation;
+        Vector2f rotation = RotationUtils.calculate(target, false, seekRange.getValue());
+
         if (rotations.getValue() == Rotations.ML && RotationLearnerManager.hasModelLoaded()) {
-            rotation = RotationLearnerManager.humanize(wholeBodyRotation(target), 1.0f, mlEase.getValue().floatValue());
-        } else {
-            rotation = aimRotation(target);
+            rotation = RotationLearnerManager.humanize(RotationUtils.getWholeBodyRotation(target, smoothedBodyPoint, bodyEase.getValue()), 1.0f, mlEase.getValue().floatValue());
         }
-        rotation = smartRotation(rotation);
 
         RotationManager.setRotations(rotation, rotSpeed, fix.getValue() != MoveFix.NONE ? fix.getValue() == MoveFix.SILENT ? RotationManager.MovementFix.NORMAL : RotationManager.MovementFix.TRADITIONAL : RotationManager.MovementFix.OFF);
-    }
-
-    private Vector2f aimRotation(EntityLivingBase entity) {
-        AxisAlignedBB box = entity.getEntityBoundingBox();
-        Vec3 eyes = mc.thePlayer.getPositionEyes(1f);
-        double inset = 0.1;
-        double minX = box.minX + inset, maxX = box.maxX - inset, minZ = box.minZ + inset, maxZ = box.maxZ - inset;
-        double height = box.maxY - box.minY;
-        double x = (box.minX + box.maxX) / 2.0;
-        double z = (box.minZ + box.maxZ) / 2.0;
-        double y;
-        switch (aimPoint.getValue()) {
-            case HEAD:
-                y = box.minY + height * 0.88;
-                break;
-            case TORSO:
-                y = box.minY + height * 0.62;
-                break;
-            case LEGS:
-                y = box.minY + height * 0.3;
-                break;
-            default: {
-                Vector2f current = RotationManager.lastRotations != null ? RotationManager.lastRotations
-                        : new Vector2f(mc.thePlayer.rotationYaw, mc.thePlayer.rotationPitch);
-                Vec3 look = RotationUtils.getVectorForRotation(current.y, current.x);
-                double distance = eyes.distanceTo(new Vec3(x, box.minY + height / 2.0, z));
-                x = MathHelper.clamp_double(eyes.xCoord + look.xCoord * distance, minX, maxX);
-                y = MathHelper.clamp_double(eyes.yCoord + look.yCoord * distance, box.minY + 0.2, box.maxY - 0.1);
-                z = MathHelper.clamp_double(eyes.zCoord + look.zCoord * distance, minZ, maxZ);
-                break;
-            }
-        }
-        Vec3 point = new Vec3(x, y, z);
-        if (bruteforce.getValue()) {
-            Vec3 visible = visiblePoint(entity, point);
-            if (visible != null) point = visible;
-        }
-        float[] rotation = RotationUtils.getRotationsTo(eyes, point);
-        return new Vector2f(rotation[0], rotation[1]);
-    }
-
-    private Vec3 visiblePoint(EntityLivingBase entity, Vec3 preferred) {
-        Vec3 eyes = mc.thePlayer.getPositionEyes(1f);
-        if (mc.theWorld.rayTraceBlocks(eyes, preferred, false, true, false) == null) return preferred;
-        AxisAlignedBB box = entity.getEntityBoundingBox();
-        Vector2f current = RotationManager.lastRotations != null ? RotationManager.lastRotations
-                : new Vector2f(mc.thePlayer.rotationYaw, mc.thePlayer.rotationPitch);
-        Vec3 best = null;
-        double bestAngle = Double.MAX_VALUE;
-        for (int ix = 0; ix < 4; ix++) {
-            for (int iy = 0; iy < 4; iy++) {
-                for (int iz = 0; iz < 4; iz++) {
-                    Vec3 point = new Vec3(box.minX + (box.maxX - box.minX) * (0.1 + 0.8 * ix / 3.0),
-                            box.minY + (box.maxY - box.minY) * (0.1 + 0.8 * iy / 3.0),
-                            box.minZ + (box.maxZ - box.minZ) * (0.1 + 0.8 * iz / 3.0));
-                    if (mc.theWorld.rayTraceBlocks(eyes, point, false, true, false) != null) continue;
-                    float[] rot = RotationUtils.getRotationsTo(eyes, point);
-                    double yaw = MathHelper.wrapAngleTo180_float(rot[0] - current.x);
-                    double pitch = rot[1] - current.y;
-                    double angle = yaw * yaw + pitch * pitch;
-                    if (angle < bestAngle) {
-                        bestAngle = angle;
-                        best = point;
-                    }
-                }
-            }
-        }
-        return best;
-    }
-
-    private Vector2f smartRotation(Vector2f wanted) {
-        if (!smartRotation.getValue() || target == null) return wanted;
-        Vector2f current = RotationManager.lastRotations;
-        if (current == null) return wanted;
-        if (looksAt(current.x, current.y)) return new Vector2f(current.x, current.y);
-        if (looksAt(wanted.x, current.y)) return new Vector2f(wanted.x, current.y);
-        if (looksAt(current.x, wanted.y)) return new Vector2f(current.x, wanted.y);
-        return wanted;
-    }
-
-    private Vector2f wholeBodyRotation(EntityLivingBase entity) {
-        AxisAlignedBB box = entity.getEntityBoundingBox();
-        Vec3 desired = new Vec3(box.minX + (box.maxX - box.minX) * MathUtils.getRandom(0.0, 1.0),
-                box.minY + (box.maxY - box.minY) * MathUtils.getRandom(0.0, 1.0),
-                box.minZ + (box.maxZ - box.minZ) * MathUtils.getRandom(0.0, 1.0));
-        if (smoothedBodyPoint == null) {
-            smoothedBodyPoint = desired;
-        } else {
-            double ease = bodyEase.getValue();
-            smoothedBodyPoint = new Vec3(
-                    smoothedBodyPoint.xCoord + (desired.xCoord - smoothedBodyPoint.xCoord) * ease,
-                    smoothedBodyPoint.yCoord + (desired.yCoord - smoothedBodyPoint.yCoord) * ease,
-                    smoothedBodyPoint.zCoord + (desired.zCoord - smoothedBodyPoint.zCoord) * ease);
-        }
-        float[] rot = RotationUtils.getRotationsTo(mc.thePlayer.getPositionEyes(1f), smoothedBodyPoint);
-        return new Vector2f(rot[0], rot[1]);
     }
 
     private void autoblock() {
@@ -484,82 +364,73 @@ public class AuraModule extends Module {
         canAttack = true;
     }
 
-    private void attack() {
-        if (mc.thePlayer == null || mc.playerController == null || target == null || !canAttack) return;
+    private void attack(MotionEvent sent) {
+        if (mc.thePlayer == null || mc.playerController == null || target == null || !canAttack)
+            return;
 
-        double dist = distanceToBox(target);
-        boolean inAttackRange = dist <= attackRange.getValue() - RANGE_EPSILON;
-        boolean inSwingRange = dist <= swingRange.getValue();
-        if (!inAttackRange && !inSwingRange) return;
+        double dist = mc.thePlayer.getDistanceToEntity(target);
+        if (dist > swingRange.getValue() && dist > attackRange.getValue()) return;
+        if (!hitTimerDone()) return;
 
-        boolean hit = inAttackRange && (throughWalls.getValue() || !rayCast.getValue() || canHit(serverRotation()));
-        if (!hit && !inSwingRange) return;
-        if (!attackTimer.hasTimeElapsed(delay, false)) return;
+        // only send a C02 when the position + rotation the server just received really hit the target,
+        // everything else is a ghost hit (the server drops it, the swing still shows on our side)
+        double reach = useOnlyMouse.getValue() ? 3.0 : attackRange.getValue();
+        Vec3 hitVec = serverHitVec(sent, reach);
 
-        attackTimer.reset();
-        delay = ab.getValue() == AutoBlock.LEGIT ? (long) (1000.0 / 5.0) : (long) (1000.0 / getCPS());
-
-        if (hit) {
-            boolean clicked = useOnlyMouse.getValue() && legitClick();
-            if (!clicked) {
+        if (hitVec != null) {
+            if (useOnlyMouse.getValue()) {
+                mc.objectMouseOver = new MovingObjectPosition(target, hitVec);
+                mc.leftClickCounter = 0;
+                mc.clickMouse();
+            } else {
                 mc.thePlayer.swingItem();
                 mc.playerController.attackEntity(mc.thePlayer, target);
             }
-        } else {
+            this.hitTicks = 0;
+        } else if (dist <= swingRange.getValue()) {
+            // pre-swing only; clickMouse on a miss would lock left click for 10 ticks and delay the real first hit
             mc.thePlayer.swingItem();
-        }
-        this.hitTicks = 0;
-    }
-
-    private Vector2f serverRotation() {
-        if (rotations.getValue() != Rotations.NONE && RotationManager.rotations != null) return RotationManager.rotations;
-        return new Vector2f(mc.thePlayer.rotationYaw, mc.thePlayer.rotationPitch);
-    }
-
-    private boolean legitClick() {
-        Vector2f server = serverRotation();
-        float yaw = mc.thePlayer.rotationYaw;
-        float pitch = mc.thePlayer.rotationPitch;
-        try {
-            mc.thePlayer.rotationYaw = server.x;
-            mc.thePlayer.rotationPitch = server.y;
-            mc.entityRenderer.getMouseOver(1);
-            MovingObjectPosition over = mc.objectMouseOver;
-            if (over == null || over.typeOfHit != MovingObjectPosition.MovingObjectType.ENTITY || over.entityHit != target) return false;
-            mc.leftClickCounter = 0;
-            mc.clickMouse();
-            return true;
-        } finally {
-            mc.thePlayer.rotationYaw = yaw;
-            mc.thePlayer.rotationPitch = pitch;
-            mc.entityRenderer.getMouseOver(1);
+            this.hitTicks = 0;
         }
     }
 
-    private boolean canHit(Vector2f rotation) {
-        if (rotation == null || target == null) return false;
-        if (distanceToBox(target) > attackRange.getValue() - RANGE_EPSILON) return false;
-        MovingObjectPosition hit = RayCastUtils.rayCast(rotation, attackRange.getValue(), 0f, mc.thePlayer);
-        if (hit != null && hit.typeOfHit == MovingObjectPosition.MovingObjectType.ENTITY) return hit.entityHit == target;
-        return hit == null && looksAt(rotation.x, rotation.y);
-    }
+    private Vec3 serverHitVec(MotionEvent sent, double reach) {
+        Vec3 eyes = new Vec3(sent.getPosX(), sent.getPosY() + mc.thePlayer.getEyeHeight(), sent.getPosZ());
+        if (!rayCast.getValue()) {
+            // no aim check wanted, still never send hits the server would reject for reach
+            AxisAlignedBB box = target.getEntityBoundingBox();
+            Vec3 closest = new Vec3(MathHelper.clamp_double(eyes.xCoord, box.minX, box.maxX),
+                    MathHelper.clamp_double(eyes.yCoord, box.minY, box.maxY),
+                    MathHelper.clamp_double(eyes.zCoord, box.minZ, box.maxZ));
+            return eyes.distanceTo(closest) <= reach ? closest : null;
+        }
 
-    private boolean looksAt(float yaw, float pitch) {
-        if (target == null) return false;
-        Vec3 eyes = mc.thePlayer.getPositionEyes(1f);
-        Vec3 look = RotationUtils.getVectorForRotation(pitch, yaw);
-        double reach = attackRange.getValue();
+        Vec3 look = RotationUtils.getVectorForRotation(sent.getPitch(), sent.getYaw());
         Vec3 end = eyes.addVector(look.xCoord * reach, look.yCoord * reach, look.zCoord * reach);
-        return target.getEntityBoundingBox().calculateIntercept(eyes, end) != null;
+        float border = target.getCollisionBorderSize();
+        AxisAlignedBB box = target.getEntityBoundingBox().expand(border, border, border);
+
+        Vec3 hitVec;
+        if (box.isVecInside(eyes)) {
+            hitVec = eyes;
+        } else {
+            MovingObjectPosition intercept = box.calculateIntercept(eyes, end);
+            if (intercept == null) return null;
+            hitVec = intercept.hitVec;
+        }
+
+        if (!throughWalls.getValue() && mc.theWorld.rayTraceBlocks(eyes, hitVec, false, true, false) != null) return null;
+        return hitVec;
     }
 
-    private static double distanceToBox(Entity entity) {
-        Vec3 eyes = mc.thePlayer.getPositionEyes(1f);
-        AxisAlignedBB box = entity.getEntityBoundingBox();
-        double x = MathHelper.clamp_double(eyes.xCoord, box.minX, box.maxX);
-        double y = MathHelper.clamp_double(eyes.yCoord, box.minY, box.maxY);
-        double z = MathHelper.clamp_double(eyes.zCoord, box.minZ, box.maxZ);
-        return eyes.distanceTo(new Vec3(x, y, z));
+    private static boolean hitTimerDone() {
+        boolean returnVal = false;
+        if (attackTimer.hasTimeElapsed(delay, false)) {
+            returnVal = true;
+            attackTimer.reset();
+            delay = ab.getValue() == AutoBlock.LEGIT ? (long) (1000.0 / 5.0) : (long) (1000.0 / getCPS());
+        }
+        return returnVal;
     }
 
     private void resetCombatState() {

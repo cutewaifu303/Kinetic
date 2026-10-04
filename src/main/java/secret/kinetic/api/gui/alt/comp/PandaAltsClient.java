@@ -33,7 +33,11 @@ public final class PandaAltsClient {
     private static final int CONNECT_TIMEOUT = 15000;
     private static final int READ_TIMEOUT = 45000;
     private static final int PURCHASE_TIMEOUT = 190000;
-    private static final long PENDING_WAIT_MS = 4 * 60 * 1000L;
+    // embed.md client rules: stop waiting for a delivery after 180s, poll progress every ~3s,
+    // never refresh stock faster than its 30s max-age, back off 60s+ (exponential) after a 429
+    private static final long PENDING_WAIT_MS = 180 * 1000L;
+    private static final long STOCK_MAX_AGE_MS = 30 * 1000L;
+    private static final long RATE_LIMIT_WAIT_MS = 60 * 1000L;
 
     private PandaAltsClient() {
     }
@@ -86,7 +90,14 @@ public final class PandaAltsClient {
     };
 
     private static volatile AltShopBackend.Progress live;
-    private static final long PROGRESS_POLL_MS = 2500L;
+    private static final long PROGRESS_POLL_MS = 3000L;
+
+    private static final Object STOCK_LOCK = new Object();
+    private static String stockKey;
+    private static long stockFetchedAt;
+    private static List<Product> stockCache;
+    private static volatile long rateLimitedUntil;
+    private static volatile int rateLimitHits;
 
     
 
@@ -100,6 +111,21 @@ public final class PandaAltsClient {
     }
 
     public static List<Product> getProducts(String apiKey) throws IOException {
+        synchronized (STOCK_LOCK) {
+            if (stockCache != null && String.valueOf(apiKey).equals(stockKey) && System.currentTimeMillis() - stockFetchedAt < STOCK_MAX_AGE_MS) {
+                return new ArrayList<>(stockCache);
+            }
+        }
+        List<Product> products = fetchProducts(apiKey);
+        synchronized (STOCK_LOCK) {
+            stockKey = String.valueOf(apiKey);
+            stockFetchedAt = System.currentTimeMillis();
+            stockCache = new ArrayList<>(products);
+            return products;
+        }
+    }
+
+    private static List<Product> fetchProducts(String apiKey) throws IOException {
         JsonObject data;
         String locale = Locale.getDefault().getLanguage();
         try {
@@ -140,6 +166,9 @@ public final class PandaAltsClient {
         body.addProperty("amount", amount);
         String progressId = newProgressId();
         body.addProperty("progress_id", progressId);
+        synchronized (STOCK_LOCK) {
+            stockCache = null;
+        }
 
         long startedAt = System.currentTimeMillis();
         live = new AltShopBackend.Progress("queued", 0, "active", "", 0, amount, false, "", startedAt);
@@ -165,7 +194,7 @@ public final class PandaAltsClient {
                 long waited = (System.currentTimeMillis() - startedAt) / 1000L;
                 if (status != null) status.update("Paid, waiting for PandaAlts delivery (" + waited + "s)...");
                 live = new AltShopBackend.Progress("delivering", 3, "pending", providerOf(data), 0, amount, true, "", startedAt);
-                Thread.sleep(4000L);
+                Thread.sleep(PROGRESS_POLL_MS);
                 JsonObject lookup = null;
                 if (!purchaseId.isEmpty()) {
                     try {
@@ -214,7 +243,7 @@ public final class PandaAltsClient {
     private static Thread startProgressPoller(String apiKey, String progressId, int amount, long startedAt, AtomicBoolean done) {
         Thread thread = new Thread(() -> {
             int misses = 0;
-            while (!done.get()) {
+            while (!done.get() && System.currentTimeMillis() - startedAt < PENDING_WAIT_MS) {
                 try {
                     Thread.sleep(PROGRESS_POLL_MS);
                 } catch (InterruptedException e) {
@@ -228,6 +257,8 @@ public final class PandaAltsClient {
                             string(p, "provider"), (int) number(p, "delivered_amount"), (int) Math.max(amount, number(p, "requested_amount")),
                             bool(p, "pending"), string(p, "error"), startedAt);
                     if (!done.get()) live = snap;
+                    String state = string(p, "status");
+                    if (state.equalsIgnoreCase("done") || state.equalsIgnoreCase("failed")) return;
                 } catch (IOException e) {
                     if (++misses > 40) return;
                 }
@@ -291,7 +322,7 @@ public final class PandaAltsClient {
         return null;
     }
 
-    private static boolean isPending(JsonObject data) {
+    public static boolean isPending(JsonObject data) {
         JsonObject txn = object(data, "transaction");
         if (txn != null && txn.has("pending")) return bool(txn, "pending");
         JsonObject purchase = object(data, "purchase");
@@ -299,7 +330,7 @@ public final class PandaAltsClient {
         return bool(data, "pending");
     }
 
-    private static boolean isRefunded(JsonObject data) {
+    public static boolean isRefunded(JsonObject data) {
         JsonObject txn = object(data, "transaction");
         if (txn != null && bool(txn, "pending_refunded")) return true;
         return string(data, "status").equalsIgnoreCase("refunded");
@@ -346,7 +377,7 @@ public final class PandaAltsClient {
 
     
 
-    private static String purchaseId(JsonObject data) {
+    public static String purchaseId(JsonObject data) {
         JsonObject transaction = object(data, "transaction");
         String id = transaction == null ? "" : string(transaction, "id", "purchase_id");
         if (!id.isEmpty()) return id;
@@ -365,7 +396,7 @@ public final class PandaAltsClient {
     }
 
     
-    private static List<OrderItem> deliverables(JsonObject data) {
+    public static List<OrderItem> deliverables(JsonObject data) {
         JsonObject purchase = object(data, "purchase");
         if (purchase == null) purchase = object(data, "response");
         if (purchase == null) purchase = data;
@@ -385,13 +416,17 @@ public final class PandaAltsClient {
             if (element.isJsonObject()) {
                 JsonObject raw = element.getAsJsonObject();
                 title = string(raw, "username", "name", "email", "login", "account", "mc_username");
-                content = string(raw, "data", "cookie", "password", "token", "refresh_token", "value", "credentials", "combo", "access_token");
+                content = maybeBase64(string(raw, "data", "cookie", "password", "token", "refresh_token", "value", "credentials", "combo", "access_token"));
                 if (content.isEmpty()) content = raw.toString();
+                // some products deliver the login in a field of its own next to data (e.g. access_token), keep it
+                for (String key : new String[]{"refresh_token", "access_token", "cookie", "token"}) {
+                    String extra = maybeBase64(string(raw, key)).trim();
+                    if (!extra.isEmpty() && !content.contains(extra)) content = content + "\n" + extra;
+                }
             } else {
                 title = "";
-                content = element.isJsonPrimitive() ? element.getAsString() : element.toString();
+                content = maybeBase64(element.isJsonPrimitive() ? element.getAsString() : element.toString());
             }
-            content = maybeBase64(content);
             items.add(new OrderItem(title.isEmpty() ? "account-" + index : title, content));
         }
         return items;
@@ -418,6 +453,11 @@ public final class PandaAltsClient {
     }
 
     private static JsonObject execute(String method, String path, String apiKey, JsonObject body, int readTimeout) throws IOException {
+        long wait = rateLimitedUntil - System.currentTimeMillis();
+        if (wait > 0) {
+            // hammering through 429s gets the IP flagged, so nothing goes out until the backoff is over
+            throw new IOException("PandaAlts rate limit reached, try again in " + (wait / 1000L + 1) + "s");
+        }
         HttpURLConnection connection = (HttpURLConnection) new URL(BASE_URL + path).openConnection();
         try {
             connection.setRequestMethod(method);
@@ -450,7 +490,12 @@ public final class PandaAltsClient {
             if (status == 403) throw new IOException(error(data, json, "PandaAlts blocked this request (VPN/proxy IP or blacklisted)"));
             if (status == 402) throw new IOException(error(data, json, "Not enough credits") + quoteReasons(data));
             if (status == 409) throw new IOException(error(data, json, "PandaAlts: not enough stock right now") + quoteReasons(data));
-            if (status == 429) throw new IOException(error(data, json, "PandaAlts rate limit reached, try again in a moment"));
+            if (status == 429) {
+                long backoff = RATE_LIMIT_WAIT_MS << Math.min(4, rateLimitHits++);
+                rateLimitedUntil = System.currentTimeMillis() + backoff;
+                throw new IOException(error(data, json, "PandaAlts rate limit reached, try again in " + backoff / 1000L + "s"));
+            }
+            if (status < 400) rateLimitHits = 0;
             if (status == 503) throw new IOException(error(data, json, "PandaAlts is in maintenance or the provider is unreachable - nothing was charged"));
             if (status < 200 || status >= 300 || json == null || !success) {
                 String fallback = json == null

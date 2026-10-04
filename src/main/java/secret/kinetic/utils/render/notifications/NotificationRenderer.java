@@ -19,12 +19,18 @@ public final class NotificationRenderer implements IMinecraft {
     private static final float RADIUS = 6f;
 
     public static void update() {
+        // the Sigma theme drives its notifications by time in SigmaHud instead
+        if (secret.kinetic.utils.render.KineticImage.isSigmaTheme()) return;
         if (!notificationManager.getNotifications().isEmpty()) {
             notificationManager.update();
         }
     }
 
     public static void draw() {
+        if (secret.kinetic.utils.render.KineticImage.isSigmaTheme()) {
+            secret.kinetic.api.gui.sigma.SigmaHud.notifications(notificationManager.getNotifications(), notificationManager::remove);
+            return;
+        }
         ScaledResolution resolution = new ScaledResolution(mc);
 
         for (Notification notification : notificationManager.getNotifications()) {

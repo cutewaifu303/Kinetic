@@ -236,6 +236,10 @@ public class ModListModule extends Module implements IMinecraft {
 
     @EventHook(EventPriority.VERY_HIGH)
     public void onRender2D(Render2DEvent event) {
+        if (KineticImage.isSigmaTheme()) {
+            secret.kinetic.api.gui.sigma.SigmaHud.arrayList(Kinetic.INSTANCE.getModuleManager().getModules(), m -> !shouldSkip(m));
+            return;
+        }
         if (style.getValue() == Style.CLEAN) {
             renderClean();
         } else {
@@ -245,6 +249,7 @@ public class ModListModule extends Module implements IMinecraft {
 
     @EventHook(EventPriority.VERY_HIGH)
     public void onShader2D(Shader2DEvent event) {
+        if (KineticImage.isSigmaTheme()) return;
         
         if (style.getValue() != Style.CLEAN) renderArrayList();
     }

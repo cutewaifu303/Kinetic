@@ -198,6 +198,11 @@ public class ColorManager {
                     first = new Color(40, 118, 255);
                     second = new Color(236, 242, 255);
                     break;
+                case SIGMA:
+                    // the Jello accent
+                    first = new Color(56, 146, 255);
+                    second = new Color(146, 200, 255);
+                    break;
                 case CHRISTIAN:
                     
                     first = new Color(255, 209, 102);

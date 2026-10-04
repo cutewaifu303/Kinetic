@@ -71,11 +71,6 @@ public final class AutoAppleModule extends Module {
         eating = true;
         itemUseStarted = false;
         eatTicks = 0;
-
-        AuraModule aura = Kinetic.INSTANCE.getModuleManager().getModule(AuraModule.class);
-        if (aura.isEnabled() && AuraModule.target != null) {
-            AuraModule.canAttack = false;
-        }
     }
 
     private void handleEating() {
@@ -101,11 +96,6 @@ public final class AutoAppleModule extends Module {
 
         this.nextEat = delay.getValue().longValue() * 10;
         stopWatch.reset();
-
-        AuraModule aura = Kinetic.INSTANCE.getModuleManager().getModule(AuraModule.class);
-        if (aura.isEnabled() && AuraModule.target != null && !AuraModule.canAttack) {
-            AuraModule.canAttack = true;
-        }
     }
 
     private void cancelEating() {
@@ -115,11 +105,6 @@ public final class AutoAppleModule extends Module {
         eating = false;
         itemUseStarted = false;
         eatTicks = 0;
-
-        AuraModule aura = Kinetic.INSTANCE.getModuleManager().getModule(AuraModule.class);
-        if (aura.isEnabled() && AuraModule.target != null && !AuraModule.canAttack) {
-            AuraModule.canAttack = true;
-        }
     }
 
     @EventHook

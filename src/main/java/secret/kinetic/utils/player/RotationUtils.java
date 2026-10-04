@@ -442,4 +442,30 @@ public class RotationUtils implements IMinecraft {
         direction = (direction % 360.0f + 360.0f) % 360.0f;
         return direction;
     }
+
+    public static Vector2f getWholeBodyRotation(EntityLivingBase entity, Vec3 smoothedBodyPoint, double bodyEase) {
+        AxisAlignedBB box = entity.getEntityBoundingBox();
+        double targetX = box.minX + (box.maxX - box.minX) * MathUtils.getRandom(0.0, 1.0);
+        double targetY = box.minY + (box.maxY - box.minY) * MathUtils.getRandom(0.0, 1.0);
+        double targetZ = box.minZ + (box.maxZ - box.minZ) * MathUtils.getRandom(0.0, 1.0);
+
+        Vec3 desired = new Vec3(targetX, targetY, targetZ);
+
+        if (smoothedBodyPoint == null) {
+            smoothedBodyPoint = desired;
+        } else {
+            double ease;
+            ease = bodyEase;
+            smoothedBodyPoint = new Vec3(
+                    smoothedBodyPoint.xCoord + (desired.xCoord - smoothedBodyPoint.xCoord) * ease,
+                    smoothedBodyPoint.yCoord + (desired.yCoord - smoothedBodyPoint.yCoord) * ease,
+                    smoothedBodyPoint.zCoord + (desired.zCoord - smoothedBodyPoint.zCoord) * ease
+            );
+        }
+
+        Vec3 eyePos = new Vec3(mc.thePlayer.posX, mc.thePlayer.posY + mc.thePlayer.getEyeHeight(), mc.thePlayer.posZ);
+        float[] rot = RotationUtils.getRotationsTo(eyePos, smoothedBodyPoint);
+
+        return new Vector2f(rot[0], rot[1]);
+    }
 }

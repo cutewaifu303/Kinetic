@@ -2,10 +2,8 @@ package net.minecraft.client.renderer;
 
 import secret.kinetic.Kinetic;
 import secret.kinetic.managers.impl.SlotManager;
-import secret.kinetic.modules.impl.combat.AuraModule;
 import secret.kinetic.modules.impl.render.AnimationsModule;
 import secret.kinetic.modules.impl.render.CameraModule;
-import secret.kinetic.utils.player.InventoryUtils;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockCarpet;
 import net.minecraft.block.BlockSnow;
@@ -309,9 +307,7 @@ public class ItemRenderer {
             GlStateManager.pushMatrix();
 
             if (this.itemToRender != null) {
-                boolean renderMap = this.itemToRender.getItem() instanceof ItemMap;
-                boolean shouldBlock = !renderMap && (AuraModule.autoBlocking && this.itemToRender.getItem() instanceof ItemSword);
-                boolean shouldBlock2 = !shouldBlock && abstractclientplayer.getItemInUseCount() > 0;
+                boolean shouldBlock2 = abstractclientplayer.getItemInUseCount() > 0;
                 boolean shouldBlock3 = shouldBlock2 && this.itemToRender.getItemUseAction() == EnumAction.BLOCK;
 
                 if (!shouldBlock3 && this.itemToRender.getItem() instanceof ItemSword) {
@@ -338,10 +334,10 @@ public class ItemRenderer {
                 } else {
                     boolean alwaysBlock = animationsEnabled && AnimationsModule.alwaysBlocking()
                             && (abstractclientplayer.isSwingInProgress || f1 > 0.001F);
-                    if (abstractclientplayer.getItemInUseCount() > 0 || AuraModule.autoBlocking || alwaysBlock) {
+                    if (abstractclientplayer.getItemInUseCount() > 0 || alwaysBlock) {
                         EnumAction enumaction = this.itemToRender.getItemUseAction();
 
-                        if ((AuraModule.autoBlocking && InventoryUtils.isHoldingSword()) || alwaysBlock)
+                        if (alwaysBlock)
                             enumaction = EnumAction.BLOCK;
 
                         switch (enumaction) {

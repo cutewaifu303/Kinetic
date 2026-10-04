@@ -631,7 +631,16 @@ public abstract class GuiScreen extends Gui implements GuiYesNoCallback
         GlStateManager.disableLighting();
         GlStateManager.disableFog();
         drawRect(0, 0, this.width, this.height, KineticUi.BASE_BG.getRGB());
-        MenuBackground.render(this.width, this.height);
+        if (secret.kinetic.utils.render.KineticImage.isSigmaTheme())
+        {
+            // Jello sub screens sit on the pre-blurred menu background
+            secret.kinetic.api.gui.sigma.SigmaDraw.blurredBackground(this.width, this.height, this.width / 2f, this.height / 2f, 1f);
+            drawRect(0, 0, this.width, this.height, 0x40000000);
+        }
+        else
+        {
+            MenuBackground.render(this.width, this.height);
+        }
         GlStateManager.color(1.0F, 1.0F, 1.0F, 1.0F);
     }
 

@@ -24,14 +24,35 @@ public class ClickGUIModule extends Module implements IMinecraft {
     public static final ModeProperty<Mode> mode = new ModeProperty<>("Mode", Mode.IMGUI);
     public static final ModeProperty<ImGuiStyleType> style = new ModeProperty<>("Style", ImGuiStyleType.KINETIC, () -> mode.getValue() == Mode.IMGUI);
     private final Property<Boolean> closePrevious = new Property<>("Close Previous", true, () -> mode.getValue() == Mode.NOVOLINE);
+    public static final ModeProperty<SigmaLayout> sigmaLayout = new ModeProperty<>("Sigma Layout", SigmaLayout.PANELS,
+            () -> mode.getValue() == Mode.SIGMA || secret.kinetic.utils.render.KineticImage.isSigmaTheme());
     public static final Property<Boolean> logoInGuis = new Property<>("Logo In GUIS", false);
+
+    public enum SigmaLayout {
+        PANELS("Panels"),
+        CENTER("Center");
+
+        public final String name;
+
+        SigmaLayout(String name) {
+            this.name = name;
+        }
+
+        public String toString() {
+            return name;
+        }
+    }
+
+    private secret.kinetic.api.gui.sigma.SigmaCenterClickGui centerGui;
 
     public enum Mode {
         PANEL("Panel"),
         KINETIC("Kinetic"),
         CLASSIC("Classic"),
         IMGUI("ImGui"),
-        NOVOLINE("Novoline");
+        NOVOLINE("Novoline"),
+        CSGO("CSGO"),
+        SIGMA("Sigma");
 
         public final String name;
 
@@ -66,6 +87,7 @@ public class ClickGUIModule extends Module implements IMinecraft {
         OCEAN("Ocean"),
         ISRAEL("Israel"),
         CHRISTIAN("Christian"),
+        SIGMA("Sigma"),
         AZURE("Azure"),
         CRYSTAL("Crystal"),
         ICE("Ice"),
@@ -128,7 +150,9 @@ public class ClickGUIModule extends Module implements IMinecraft {
 
     @Override
     public void onEnable() {
-        switch (mode.getValue()) {
+        // the Sigma theme always uses the Jello click GUI, whatever mode is picked
+        Mode open = secret.kinetic.utils.render.KineticImage.isSigmaTheme() ? Mode.SIGMA : mode.getValue();
+        switch (open) {
             case PANEL:
                 mc.displayGuiScreen(new secret.kinetic.api.gui.click.panel.PanelClickGui());
                 break;
@@ -144,6 +168,17 @@ public class ClickGUIModule extends Module implements IMinecraft {
             case IMGUI:
                 mc.displayGuiScreen(Kinetic.INSTANCE.getImGuiClickGui());
                 break;
+            case CSGO:
+                mc.displayGuiScreen(Kinetic.INSTANCE.getCsgoClickGui());
+                break;
+            case SIGMA:
+                if (sigmaLayout.getValue() == SigmaLayout.CENTER) {
+                    if (centerGui == null) centerGui = new secret.kinetic.api.gui.sigma.SigmaCenterClickGui();
+                    mc.displayGuiScreen(centerGui);
+                } else {
+                    mc.displayGuiScreen(Kinetic.INSTANCE.getSigmaClickGui());
+                }
+                break;
         }
     }
 
@@ -157,6 +192,12 @@ public class ClickGUIModule extends Module implements IMinecraft {
             Kinetic.INSTANCE.getClassicClickGUI().beginClose();
         } else if (mc.currentScreen == Kinetic.INSTANCE.getKineticClickGui() && !Kinetic.INSTANCE.getKineticClickGui().isClosing()) {
             Kinetic.INSTANCE.getKineticClickGui().beginClose();
+        } else if (mc.currentScreen == Kinetic.INSTANCE.getCsgoClickGui() && !Kinetic.INSTANCE.getCsgoClickGui().isClosing()) {
+            Kinetic.INSTANCE.getCsgoClickGui().beginClose();
+        } else if (mc.currentScreen == Kinetic.INSTANCE.getSigmaClickGui() && !Kinetic.INSTANCE.getSigmaClickGui().isClosing()) {
+            Kinetic.INSTANCE.getSigmaClickGui().beginClose();
+        } else if (centerGui != null && mc.currentScreen == centerGui && !centerGui.isClosing()) {
+            centerGui.beginClose();
         }
     }
 }

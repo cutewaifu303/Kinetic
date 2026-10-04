@@ -49,7 +49,7 @@ public class AutoExtinguishModule extends Module {
     public void onTick(ClientTickEvent event) {
         if (mc.thePlayer == null || mc.theWorld == null) return;
 
-        if (!mc.thePlayer.isBurning() || mc.thePlayer.isUsingItem() || Kinetic.INSTANCE.getModuleManager().getModule(ScaffoldModule.class).isEnabled() || Kinetic.INSTANCE.getModuleManager().getModule(AuraModule.class).isEnabled() && AuraModule.target != null) {
+        if (!mc.thePlayer.isBurning() || mc.thePlayer.isUsingItem() || Kinetic.INSTANCE.getModuleManager().getModule(ScaffoldModule.class).isEnabled()) {
             this.resetState();
             return;
         }

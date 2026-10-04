@@ -29,6 +29,7 @@ public final class KineticImage {
     public static final ResourceLocation ISRAEL_LOGO = new ResourceLocation("kinetic/gui/israel_logo.png");
     public static final ResourceLocation ISRAEL_AVATAR = new ResourceLocation("kinetic/gui/israel_avatar.png");
     
+    public static final ResourceLocation SIGMA_LOGO = new ResourceLocation("sigma/jellologo.png");
     public static final ResourceLocation CHRISTIAN_LOGO = new ResourceLocation("kinetic/gui/christian_logo.png");
     public static final ResourceLocation CHRISTIAN_AVATAR = new ResourceLocation("kinetic/gui/christian_avatar.png");
     
@@ -154,6 +155,13 @@ public final class KineticImage {
             drawPlain(CHRISTIAN_LOGO, x, y, width, height, alpha);
             return;
         }
+        if (isSigmaTheme()) {
+            // the Jello logo is wide, fit it into the box instead of squashing it
+            float aspect = 323f / 161f;
+            float w = Math.min(width, height * aspect), h = w / aspect;
+            drawPlain(SIGMA_LOGO, x + (width - w) / 2f, y + (height - h) / 2f, w, h, alpha);
+            return;
+        }
         ResourceLocation figure = figureFor(preset());
         if (figure != null) {
             drawPlain(figure, x, y, width, height, alpha);
@@ -164,6 +172,10 @@ public final class KineticImage {
 
     public static boolean isIsraelTheme() {
         return ClickGUIModule.color.getValue() == ClickGUIModule.Color.ISRAEL;
+    }
+
+    public static boolean isSigmaTheme() {
+        return ClickGUIModule.color.getValue() == ClickGUIModule.Color.SIGMA;
     }
 
     public static boolean isChristianTheme() {

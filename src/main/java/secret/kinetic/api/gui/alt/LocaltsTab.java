@@ -410,7 +410,8 @@ final class LocaltsTab extends AltTab {
 
     private void connect() {
         if (busy) return;
-        String key = apiKeyField.getText().trim();
+        // keys never contain whitespace, so stray spaces or line breaks from copying are dropped
+        String key = apiKeyField.getText().replaceAll("\\s+", "");
         if (key.isEmpty()) {
             setStatus("Enter your API key first!", true);
             return;

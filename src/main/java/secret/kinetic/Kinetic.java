@@ -12,6 +12,8 @@ import secret.kinetic.api.gui.click.imgui.ImGuiClickGui;
 import secret.kinetic.api.gui.click.novoline.NovolineClickGui;
 import secret.kinetic.api.gui.click.kinetic.KineticClickGui;
 import secret.kinetic.api.gui.click.classic.ClassicClickGUI;
+import secret.kinetic.api.gui.click.csgo.CsgoClickGui;
+import secret.kinetic.api.gui.click.sigma.SigmaClickGui;
 import secret.kinetic.managers.ManagerWrapper;
 import secret.kinetic.modules.ModuleManager;
 import secret.kinetic.modules.impl.render.ClickGUIModule;
@@ -42,6 +44,10 @@ public class Kinetic {
     private final ImGuiClickGui imGuiClickGui = new ImGuiClickGui();
     @Getter
     private final KineticClickGui kineticClickGui = new KineticClickGui();
+    @Getter
+    private final CsgoClickGui csgoClickGui = new CsgoClickGui();
+    @Getter
+    private final SigmaClickGui sigmaClickGui = new SigmaClickGui();
     @Getter
     private NotificationHandler notificationHandler = new NotificationHandler();
     private BindsConfig bindsConfig;

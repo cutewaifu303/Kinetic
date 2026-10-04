@@ -1,8 +1,6 @@
 package net.minecraft.client.renderer.entity;
 
-import secret.kinetic.Kinetic;
 import secret.kinetic.managers.impl.SlotManager;
-import secret.kinetic.modules.impl.combat.AuraModule;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.AbstractClientPlayer;
 import net.minecraft.client.entity.EntityPlayerSP;
@@ -16,8 +14,6 @@ import net.minecraft.scoreboard.Score;
 import net.minecraft.scoreboard.ScoreObjective;
 import net.minecraft.scoreboard.Scoreboard;
 import net.minecraft.util.ResourceLocation;
-
-import static secret.kinetic.utils.misc.IMinecraft.mc;
 
 public class RenderPlayer extends RendererLivingEntity<AbstractClientPlayer>
 {
@@ -97,11 +93,6 @@ public class RenderPlayer extends RendererLivingEntity<AbstractClientPlayer>
             else
             {
                 modelplayer.heldItemRight = 1;
-
-                if (Kinetic.INSTANCE.getModuleManager().getModule(AuraModule.class).isEnabled() && AuraModule.target != null && AuraModule.autoBlocking && clientPlayer == mc.thePlayer)
-                {
-                    modelplayer.heldItemRight = 3;
-                }
 
                 if (clientPlayer.getItemInUseCount() > 0)
                 {

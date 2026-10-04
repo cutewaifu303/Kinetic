@@ -224,7 +224,14 @@ public class CustomTextBox extends Gui {
                     }
                 }
                 String pasteText = filtered.toString();
-                if (!pasteText.isEmpty()) {
+                if (!pasteText.isEmpty() && masked) {
+                    // masked fields hold keys and tokens: a paste replaces what is there instead of silently appending
+                    // to an old value the user cannot see
+                    text = pasteText.trim();
+                    if (text.length() > maxStringLength) text = text.substring(0, maxStringLength);
+                    cursorPosition = text.length();
+                    selectionEnd = cursorPosition;
+                } else if (!pasteText.isEmpty()) {
                     if (cursorPosition != selectionEnd) {
                         deleteSelectedText();
                     }

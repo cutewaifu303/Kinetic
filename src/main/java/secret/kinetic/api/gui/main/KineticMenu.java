@@ -48,6 +48,10 @@ public class KineticMenu extends GuiScreen {
 
     @Override
     public void initGui() {
+        if (secret.kinetic.utils.render.KineticImage.isSigmaTheme()) {
+            mc.displayGuiScreen(this);
+            return;
+        }
         if (openedAt == 0L) openedAt = System.currentTimeMillis();
         secret.kinetic.api.gui.alt.KineticAltMenu.runAutoLogin(mc, width, height);
         lastFrame = 0L;

@@ -280,6 +280,13 @@ public class KineticAltMenu extends GuiScreen {
 
     
     void drawPanel(int x, int y, int w, int h) {
+        if (secret.kinetic.utils.render.KineticImage.isSigmaTheme()) {
+            // Jello dark card, same as the Sigma notifications
+            secret.kinetic.api.gui.click.sigma.SigmaRenderer.setScale(1f);
+            secret.kinetic.api.gui.click.sigma.SigmaRenderer.glow(x, y, w, h, 12f, 0.7f);
+            secret.kinetic.api.gui.click.sigma.SigmaRenderer.roundRect(x, y, w, h, 4f, 0xED232323);
+            return;
+        }
         KineticUi.blend();
         LiquidGlass.panel(x, y, w, h, 9f, 1f, 0f);
     }
@@ -414,7 +421,7 @@ public class KineticAltMenu extends GuiScreen {
     }
 
     
-    private void rememberLast(String entry) {
+    void rememberLast(String entry) {
         writeAutoLogin(autoLoginEnabled(), entry);
     }
 
@@ -762,6 +769,91 @@ public class KineticAltMenu extends GuiScreen {
 
     boolean isMouseOverButton(int mouseX, int mouseY, int x, int y, int w, int h) {
         return mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h;
+    }
+
+    // ---- backend API for other alt manager skins (the Sigma theme), same storage and login code ----
+
+    /** Set on an instance that must stay the classic Kinetic screen even when a theme swaps alt managers. */
+    public boolean keepClassic;
+
+    public java.util.List<String> accounts() {
+        return alts;
+    }
+
+    public void login(String alt) {
+        loginWithAlt(alt);
+    }
+
+    public void loginCracked(String name) {
+        handleCrackedLogin(name == null ? "" : name.trim());
+    }
+
+    public void loginMicrosoft() {
+        handleOAuthLogin();
+    }
+
+    public void loginCookie() {
+        handleCookieLogin();
+    }
+
+    public void loginToken(String token) {
+        tokenField.setText(token == null ? "" : token.trim());
+        handleTokenLogin();
+    }
+
+    public void removeAccount(String alt) {
+        if (alts.remove(alt)) saveAltsToFile();
+    }
+
+    public String status() {
+        return statusString;
+    }
+
+    public boolean statusIsError() {
+        return statusIsError;
+    }
+
+    public boolean busy() {
+        return isLoggingIn;
+    }
+
+    /** Tabs other than the account list (1 = alt shop, 2 = skins), driven by another alt manager skin. */
+    public String[] tabTitles() {
+        return TAB_TITLES.clone();
+    }
+
+    public void showTab(int index) {
+        if (tabs[index] != null) tabs[index].onShow();
+    }
+
+    public void drawTab(int index, int x, int y, int w, int h, int mouseX, int mouseY) {
+        if (tabs[index] == null) return;
+        tabs[index].layout(x, y, w, h);
+        tabs[index].draw(mouseX, mouseY);
+    }
+
+    public boolean clickTab(int index, int mouseX, int mouseY, int button) {
+        return tabs[index] != null && tabs[index].mouseClicked(mouseX, mouseY, button);
+    }
+
+    public void releaseTab(int index, int mouseX, int mouseY, int state) {
+        if (tabs[index] != null) tabs[index].mouseReleased(mouseX, mouseY, state);
+    }
+
+    public void dragTab(int index, int mouseX, int mouseY) {
+        if (tabs[index] != null) tabs[index].mouseClickMove(mouseX, mouseY);
+    }
+
+    public void scrollTab(int index, int wheel) {
+        if (tabs[index] != null) tabs[index].mouseScrolled(wheel);
+    }
+
+    public void keyTab(int index, char typedChar, int keyCode) {
+        if (tabs[index] != null) tabs[index].keyTyped(typedChar, keyCode);
+    }
+
+    public static String accountType(String alt) {
+        return typeLabel(alt.split("\\|")[0]);
     }
 
     private void setStatus(String message, boolean isError) {

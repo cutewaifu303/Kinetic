@@ -5,6 +5,7 @@ import secret.kinetic.api.events.annotations.EventHook;
 import secret.kinetic.api.events.annotations.EventPriority;
 import secret.kinetic.api.events.impl.player.PreUpdateEvent;
 import secret.kinetic.api.events.impl.render.Render2DEvent;
+import secret.kinetic.api.events.impl.render.Render3DEvent;
 import secret.kinetic.api.properties.Property;
 import secret.kinetic.api.properties.impl.ModeProperty;
 import secret.kinetic.api.properties.impl.NumberProperty;
@@ -18,7 +19,9 @@ import secret.kinetic.modules.impl.combat.AuraModule;
 import secret.kinetic.utils.client.ClientInfoUtils;
 import secret.kinetic.utils.player.RotationUtils;
 import secret.kinetic.utils.player.packet.PacketUtils;
+import secret.kinetic.utils.render.Render3D;
 import secret.kinetic.utils.render.progress.ProgressBarEntry;
+import secret.kinetic.utils.world.BedUtils;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockAir;
 import net.minecraft.block.BlockBed;
@@ -34,29 +37,50 @@ import net.minecraft.network.play.client.C07PacketPlayerDigging;
 import net.minecraft.network.play.client.C09PacketHeldItemChange;
 import net.minecraft.network.play.client.C0APacketAnimation;
 import net.minecraft.potion.Potion;
+import net.minecraft.util.AxisAlignedBB;
 import net.minecraft.util.BlockPos;
 import net.minecraft.util.EnumFacing;
 import net.minecraft.util.MathHelper;
 import net.minecraft.util.MovingObjectPosition;
 import net.minecraft.util.Vec3;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.PriorityQueue;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 @ModuleInfo(label = "Breaker", description = "Breaks beds with raw digging packets, optionally straight through walls", category = ModuleCategory.PLAYER)
 public final class BreakerModule extends Module {
 
-    
+
 
 
 
 
     private static final double REACH_SQUARED = 36.0D;
 
-    
+
 
 
 
 
     private static final float SERVER_THRESHOLD = 0.7F;
     private static final float VANILLA_THRESHOLD = 1.0F;
+
+    // how far around the bed the cover planner looks for a way in
+    private static final int SEARCH_RADIUS = 4;
+    private static final int MAX_EXPANSIONS = 4000;
+    // start/stop packets plus the re-target cooldown: every extra block costs this much on top of its dig time,
+    // so the planner only digs through two soft blocks instead of one hard block when that is really faster
+    private static final double BLOCK_OVERHEAD_TICKS = 3.0D;
+    private static final Pattern TEAM_COLOR = Pattern.compile("§([0-9a-fA-F])");
 
     public enum Mode {
         LEGIT("Legit"), VANILLA("Vanilla"), HYPIXEL("Hypixel"), PACKET("Packet"), QUEUE("Queue");
@@ -75,34 +99,63 @@ public final class BreakerModule extends Module {
     private final ModeProperty<Mode> mode = new ModeProperty<>("Break Mode", Mode.PACKET);
     private final NumberProperty breakRange = new NumberProperty("Breaker Range", 4.5f, 1f, 6f, 0.5f);
     private final NumberProperty safety = new NumberProperty("Safety Ticks", 1, 0, 5, 1);
+    public final Property<Boolean> breakCover = new Property<Boolean>("Break Cover", false, () -> mode.getValue() != Mode.HYPIXEL);
+    public final Property<Boolean> teamCheck = new Property<Boolean>("Team Check", true);
+    public final Property<Boolean> combatDig = new Property<Boolean>("Dig In Combat", true, () -> mode.getValue() != Mode.LEGIT && mode.getValue() != Mode.HYPIXEL);
     public final Property<Boolean> rotate = new Property<Boolean>("Rotations", true, () -> mode.getValue() != Mode.QUEUE);
     public final Property<Boolean> moveFix = new Property<Boolean>("Move Fix", true, () -> mode.getValue() != Mode.QUEUE && rotate.getValue());
-    
+
     public final Property<Boolean> autoTool = new Property<Boolean>("Auto Tool", true);
     public final Property<Boolean> toolSpoof = new Property<Boolean>("Tool Spoof", true);
     public final Property<Boolean> swing = new Property<Boolean>("Visual Swing", true);
     public final Property<Boolean> whitelist = new Property<Boolean>("Whitelist", true);
     public final Property<Boolean> progressBar = new Property<Boolean>("Progress Bar", true);
+    public final Property<Boolean> highlight = new Property<Boolean>("Highlight", true);
 
     public BlockPos breakPos;
     private EnumFacing breakFace;
-    
+    private boolean breakingBed;
+
     private int digTicks;
     private boolean digging;
-    
+
     private boolean queued;
     private int timeout;
     private int cooldown;
-    
+
     private int readyTicks;
     private int spoofSlot = -1;
     private int lastRealSlot = -1;
-    
+
     private int oldSlot = -1;
     private float progress;
     private ProgressBarEntry barEntry;
 
-    
+    private static final class Plan {
+        final BlockPos pos;
+        final EnumFacing face;
+        final boolean bed;
+        final double cost;
+
+        Plan(BlockPos pos, EnumFacing face, boolean bed, double cost) {
+            this.pos = pos;
+            this.face = face;
+            this.bed = bed;
+            this.cost = cost;
+        }
+    }
+
+    private static final class Node {
+        final BlockPos pos;
+        final double cost;
+
+        Node(BlockPos pos, double cost) {
+            this.pos = pos;
+            this.cost = cost;
+        }
+    }
+
+
     public boolean isDigging() {
         return digging && breakPos != null;
     }
@@ -131,6 +184,7 @@ public final class BreakerModule extends Module {
     private void resetState() {
         breakPos = null;
         breakFace = EnumFacing.UP;
+        breakingBed = false;
         digTicks = 0;
         digging = false;
         queued = false;
@@ -149,11 +203,9 @@ public final class BreakerModule extends Module {
             return;
         }
 
-        
-        
-        
-        
-        if (auraBusy()) {
+        // the server counts dig time on its own clock, so a dig that is already running does not need to be
+        // thrown away when Aura takes over the rotations; only the legit-looking modes stay out of fights
+        if (auraBusy() && abortsForCombat()) {
             if (digging && !queued) abortDig();
             if (!digging) {
                 progress = 0f;
@@ -176,25 +228,30 @@ public final class BreakerModule extends Module {
             return;
         }
 
-        BlockPos target = selectTarget();
-        if (target == null) {
+        Plan plan = selectTarget();
+        if (plan == null) {
             progress = 0f;
             return;
         }
 
-        EnumFacing face = bestFacing(target);
-        if (mode.getValue() == Mode.LEGIT && !hasLineOfSight(target, face)) {
+        if (mode.getValue() == Mode.LEGIT && !hasLineOfSight(plan.pos, plan.face)) {
             return;
         }
 
-        startDig(target, face);
+        startDig(plan);
     }
 
-    
+    private boolean abortsForCombat() {
+        return mode.getValue() == Mode.LEGIT || mode.getValue() == Mode.HYPIXEL || !combatDig.getValue();
+    }
 
-    private void startDig(BlockPos pos, EnumFacing face) {
+
+
+    private void startDig(Plan plan) {
+        BlockPos pos = plan.pos;
         breakPos = pos;
-        breakFace = face;
+        breakFace = plan.face;
+        breakingBed = plan.bed;
         digTicks = 0;
         digging = true;
         queued = false;
@@ -203,15 +260,24 @@ public final class BreakerModule extends Module {
 
         applyAutoTool(pos);
         applySpoof(pos);
-        PacketUtils.sendPacket(new C07PacketPlayerDigging(C07PacketPlayerDigging.Action.START_DESTROY_BLOCK, pos, face));
+        PacketUtils.sendPacket(new C07PacketPlayerDigging(C07PacketPlayerDigging.Action.START_DESTROY_BLOCK, pos, breakFace));
         sendSwing();
         aim(true);
 
         float perTick = hardnessPerTick(pos);
+
+        // the server already harvests on START when a single tick is enough, a STOP would just be a stray packet
+        if (perTick >= VANILLA_THRESHOLD) {
+            queued = true;
+            progress = 1f;
+            timeout = graceTicks();
+            return;
+        }
+
         timeout = ticksUntil(perTick, VANILLA_THRESHOLD) + graceTicks();
 
-        
-        
+
+
         if (mode.getValue() == Mode.QUEUE) {
             stopDig(perTick);
         }
@@ -223,7 +289,7 @@ public final class BreakerModule extends Module {
             return;
         }
 
-        
+
         if (mc.theWorld.getBlockState(breakPos).getBlock() instanceof BlockAir) {
             finishDig();
             return;
@@ -247,7 +313,7 @@ public final class BreakerModule extends Module {
 
         float perTick = hardnessPerTick(breakPos);
         float damage = perTick * (digTicks + 1);
-        progress = MathHelper.clamp_float(damage, 0f, 1f);
+        progress = MathHelper.clamp_float(queued ? Math.max(progress, damage) : damage, 0f, 1f);
         showCracks();
 
         if (queued) {
@@ -273,16 +339,18 @@ public final class BreakerModule extends Module {
         sendSwing();
 
         queued = true;
-        
-        
+
+
         timeout = Math.max(0, ticksUntil(perTick, VANILLA_THRESHOLD) - digTicks) + graceTicks();
     }
 
     private void finishDig() {
+        boolean wasBed = breakingBed;
         releaseSpoof();
         resetSlot();
         resetState();
-        cooldown = 2;
+        // cover blocks are only a step on the way to the bed, go for the next one right away
+        cooldown = wasBed ? 2 : 1;
         progress = 0f;
     }
 
@@ -317,22 +385,23 @@ public final class BreakerModule extends Module {
         return 10 + ClientInfoUtils.getPing() / 50 + safety.getValue().intValue();
     }
 
-    
 
-    private BlockPos selectTarget() {
-        BlockPos bed = findBed();
-        if (bed == null) {
-            return null;
-        }
 
-        if (mode.getValue() == Mode.HYPIXEL && !isBedOpen(bed)) {
-            BlockPos cover = getNearestBlock(bed);
-            if (cover != null && isTargetValid(cover)) {
-                return cover;
+    private Plan selectTarget() {
+        boolean cover = mode.getValue() == Mode.HYPIXEL || breakCover.getValue();
+        Plan best = null;
+
+        for (BlockPos[] bed : findBeds()) {
+            Plan plan = cover ? planRoute(bed) : null;
+            if (plan == null) {
+                plan = directPlan(bed);
+            }
+            if (plan != null && (best == null || plan.cost < best.cost)) {
+                best = plan;
             }
         }
 
-        return isTargetValid(bed) ? bed : null;
+        return best;
     }
 
     private boolean isTargetValid(BlockPos pos) {
@@ -348,7 +417,7 @@ public final class BreakerModule extends Module {
         return !(whitelist.getValue() && BreakerWhitelistManager.isWhitelisted(pos));
     }
 
-    
+
     private boolean inServerReach(BlockPos pos) {
         double dx = mc.thePlayer.posX - (pos.getX() + 0.5D);
         double dy = mc.thePlayer.posY - (pos.getY() + 0.5D) + 1.5D;
@@ -356,14 +425,17 @@ public final class BreakerModule extends Module {
         return dx * dx + dy * dy + dz * dz <= REACH_SQUARED;
     }
 
-    private BlockPos findBed() {
-        int radius = MathHelper.ceiling_double_int(breakRange.getValue());
+    /**
+     * Every bed in range as its two halves, minus our own: the whitelist from the game start message, plus a
+     * team colour check so a missed or late whitelist never makes us break our own bed.
+     */
+    private List<BlockPos[]> findBeds() {
+        List<BlockPos[]> beds = new ArrayList<>();
+        Set<BlockPos> seen = new HashSet<>();
+        int radius = MathHelper.ceiling_double_int(breakRange.getValue()) + 1;
         int px = MathHelper.floor_double(mc.thePlayer.posX);
         int py = MathHelper.floor_double(mc.thePlayer.posY);
         int pz = MathHelper.floor_double(mc.thePlayer.posZ);
-
-        BlockPos closest = null;
-        double closestDist = Double.MAX_VALUE;
 
         for (int x = -radius; x <= radius; x++) {
             for (int y = -radius; y <= radius; y++) {
@@ -372,87 +444,218 @@ public final class BreakerModule extends Module {
                     if (!(mc.theWorld.getBlockState(pos).getBlock() instanceof BlockBed)) {
                         continue;
                     }
-                    if (whitelist.getValue() && BreakerWhitelistManager.isWhitelisted(pos)) {
-                        continue;
+
+                    List<BlockPos> halves = new ArrayList<>(2);
+                    BlockPos[] both = BedUtils.halves(pos);
+                    for (BlockPos half : both == null ? new BlockPos[]{pos} : both) {
+                        if (mc.theWorld.getBlockState(half).getBlock() instanceof BlockBed) {
+                            halves.add(half);
+                        }
                     }
-                    if (!inServerReach(pos)) {
+                    if (halves.isEmpty() || !seen.add(halves.get(0))) {
                         continue;
                     }
 
-                    double dist = mc.thePlayer.getDistance(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
-                    if (dist > breakRange.getValue() || dist >= closestDist) {
+                    boolean skip = false, inRange = false;
+                    for (BlockPos half : halves) {
+                        if (whitelist.getValue() && BreakerWhitelistManager.isWhitelisted(half)) {
+                            skip = true;
+                        }
+                        double dist = mc.thePlayer.getDistance(half.getX() + 0.5, half.getY() + 0.5, half.getZ() + 0.5);
+                        if (dist <= breakRange.getValue() && inServerReach(half)) {
+                            inRange = true;
+                        }
+                    }
+                    if (skip || !inRange || (teamCheck.getValue() && isOwnBed(halves.get(0)))) {
                         continue;
                     }
 
-                    closestDist = dist;
-                    closest = pos;
+                    beds.add(halves.toArray(new BlockPos[0]));
                 }
             }
         }
 
-        return closest;
+        return beds;
     }
 
-    private boolean isBedOpen(BlockPos pos) {
-        BlockPos otherHalf = null;
-        for (BlockPos adjacent : new BlockPos[]{pos.north(), pos.south(), pos.east(), pos.west()}) {
-            if (mc.theWorld.getBlockState(adjacent).getBlock() instanceof BlockBed) {
-                otherHalf = adjacent;
-                break;
-            }
-        }
-        if (otherHalf == null) {
+    private boolean isOwnBed(BlockPos pos) {
+        Matcher matcher = TEAM_COLOR.matcher(mc.thePlayer.getDisplayName().getFormattedText());
+        if (!matcher.find()) {
             return false;
         }
-        return isNearbyAir(pos) || isNearbyAir(otherHalf);
+        char own = Character.toLowerCase(matcher.group(1).charAt(0));
+        if (own == 'f') {
+            return false;
+        }
+        BedUtils.Team team = BedUtils.teamOf(pos);
+        return team != BedUtils.UNKNOWN && Character.toLowerCase(team.code) == own;
     }
 
-    public boolean isNearbyAir(BlockPos pos) {
-        for (BlockPos adjacent : new BlockPos[]{pos.up(), pos.south(), pos.east(), pos.west(), pos.north()}) {
-            if (mc.theWorld.getBlockState(adjacent).getBlock() instanceof BlockAir) {
-                return true;
+    private Plan directPlan(BlockPos[] bed) {
+        Vec3 eyes = mc.thePlayer.getPositionEyes(1f);
+        Plan best = null;
+        for (BlockPos half : bed) {
+            if (!isTargetValid(half)) {
+                continue;
+            }
+            EnumFacing face = bestFacing(half);
+            double score = eyes.distanceTo(hitVec(half, face));
+            if (best == null || score < best.cost) {
+                best = new Plan(half, face, true, score);
             }
         }
-        return false;
+        return best;
     }
 
-    public BlockPos getNearestBlock(BlockPos pos) {
-        double distance = Double.MAX_VALUE;
-        BlockPos nearest = null;
+    /**
+     * Cheapest way into a covered bed. Dijkstra from the bed outwards where every block costs its real dig time
+     * with the best tool we have, ending at the first air block we can see (or any air touching the bed, which
+     * already counts as an open bed). The block to dig is the outermost solid one on that route, so layered
+     * defenses get peeled from our side through their softest spot instead of the nearest block.
+     */
+    private Plan planRoute(BlockPos[] bed) {
+        Vec3 eyes = mc.thePlayer.getPositionEyes(1f);
+        boolean needSight = mode.getValue() == Mode.LEGIT;
+        BlockPos origin = bed[0];
+        Set<BlockPos> halves = new HashSet<>(Arrays.asList(bed));
+        Map<BlockPos, Double> costs = new HashMap<>();
+        Map<BlockPos, BlockPos> parents = new HashMap<>();
+        PriorityQueue<Node> open = new PriorityQueue<>(Comparator.comparingDouble((Node n) -> n.cost));
 
-        for (BlockPos adjacent : new BlockPos[]{pos.up(), pos.west(), pos.south(), pos.east(), pos.north()}) {
-            Block block = mc.theWorld.getBlockState(adjacent).getBlock();
-            if (block instanceof BlockAir || block instanceof BlockBed) {
+        for (BlockPos half : bed) {
+            costs.put(half, 0D);
+            open.add(new Node(half, 0D));
+        }
+
+        int expansions = 0;
+        while (!open.isEmpty() && expansions++ < MAX_EXPANSIONS) {
+            Node node = open.poll();
+            if (node.cost > costs.get(node.pos)) {
                 continue;
             }
 
-            double dist = mc.thePlayer.getDistance(adjacent.getX() + 0.5, adjacent.getY() + 0.5, adjacent.getZ() + 0.5);
-            if (dist < distance) {
-                nearest = adjacent;
-                distance = dist;
+            if (!halves.contains(node.pos) && isPassable(node.pos)) {
+                BlockPos from = parents.get(node.pos);
+                boolean touchesBed = halves.contains(from) && !from.down().equals(node.pos);
+                if ((touchesBed && !needSight) || canSee(eyes, node.pos)) {
+                    Plan plan = firstBreak(node.pos, parents, halves, node.cost);
+                    if (plan != null) {
+                        return plan;
+                    }
+                }
+            }
+
+            for (EnumFacing facing : EnumFacing.VALUES) {
+                BlockPos next = node.pos.offset(facing);
+                if (halves.contains(next)
+                        || Math.abs(next.getX() - origin.getX()) > SEARCH_RADIUS
+                        || Math.abs(next.getY() - origin.getY()) > SEARCH_RADIUS
+                        || Math.abs(next.getZ() - origin.getZ()) > SEARCH_RADIUS) {
+                    continue;
+                }
+
+                double step = stepCost(next, eyes);
+                if (Double.isInfinite(step)) {
+                    continue;
+                }
+
+                double total = node.cost + step;
+                Double known = costs.get(next);
+                if (known != null && known <= total) {
+                    continue;
+                }
+                costs.put(next, total);
+                parents.put(next, node.pos);
+                open.add(new Node(next, total));
             }
         }
 
-        return nearest;
+        return null;
     }
 
-    
+    private Plan firstBreak(BlockPos goal, Map<BlockPos, BlockPos> parents, Set<BlockPos> halves, double cost) {
+        BlockPos previous = goal;
+        BlockPos current = parents.get(goal);
+        while (current != null) {
+            if (halves.contains(current) || !isPassable(current)) {
+                return new Plan(current, facingTowards(current, previous), halves.contains(current), cost);
+            }
+            previous = current;
+            current = parents.get(current);
+        }
+        return null;
+    }
 
-    
+    private double stepCost(BlockPos pos, Vec3 eyes) {
+        if (isPassable(pos)) {
+            return 0.01D;
+        }
+
+        Block block = mc.theWorld.getBlockState(pos).getBlock();
+        if (block instanceof BlockBed || block.getBlockHardness(mc.theWorld, pos) < 0f || !inServerReach(pos)) {
+            return Double.POSITIVE_INFINITY;
+        }
+        if (whitelist.getValue() && BreakerWhitelistManager.isWhitelisted(pos)) {
+            return Double.POSITIVE_INFINITY;
+        }
+
+        float perTick = hardnessPerTick(block, pos, bestToolStack(block));
+        if (perTick <= 0f) {
+            return Double.POSITIVE_INFINITY;
+        }
+
+        double ticks = Math.min(200D, Math.ceil(threshold() / perTick));
+        Vec3 center = new Vec3(pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D);
+        return ticks + BLOCK_OVERHEAD_TICKS + eyes.distanceTo(center) * 0.1D;
+    }
+
+    private boolean isPassable(BlockPos pos) {
+        Block block = mc.theWorld.getBlockState(pos).getBlock();
+        return block instanceof BlockAir || block.getMaterial().isLiquid() || block.getMaterial().isReplaceable();
+    }
+
+    private boolean canSee(Vec3 eyes, BlockPos pos) {
+        Vec3 center = new Vec3(pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D);
+        return mc.theWorld.rayTraceBlocks(eyes, center, false, true, false) == null;
+    }
+
+    private EnumFacing facingTowards(BlockPos from, BlockPos to) {
+        for (EnumFacing facing : EnumFacing.VALUES) {
+            if (from.offset(facing).equals(to)) {
+                return facing;
+            }
+        }
+        return bestFacing(from);
+    }
+
+
+
+
 
 
 
 
     private float hardnessPerTick(BlockPos pos) {
-        Block block = mc.theWorld.getBlockState(pos).getBlock();
+        return hardnessPerTick(mc.theWorld.getBlockState(pos).getBlock(), pos, serverHeldItem());
+    }
+
+    private float hardnessPerTick(Block block, BlockPos pos, ItemStack stack) {
         float hardness = block.getBlockHardness(mc.theWorld, pos);
         if (hardness < 0f) {
             return 0f;
         }
 
-        ItemStack stack = serverHeldItem();
         float efficiency = digSpeed(block, stack);
         return canHarvest(block, stack) ? efficiency / hardness / 30f : efficiency / hardness / 100f;
+    }
+
+    private ItemStack bestToolStack(Block block) {
+        ItemStack held = mc.thePlayer.inventory.getStackInSlot(mc.thePlayer.inventory.currentItem);
+        if (!autoTool.getValue() && !toolSpoof.getValue()) {
+            return held;
+        }
+        int slot = bestSlot(block);
+        return slot == -1 ? held : mc.thePlayer.inventory.getStackInSlot(slot);
     }
 
     private float digSpeed(Block block, ItemStack stack) {
@@ -508,7 +711,7 @@ public final class BreakerModule extends Module {
         return mc.thePlayer.inventory.getStackInSlot(slot);
     }
 
-    
+
 
     private void applySpoof(BlockPos pos) {
         if (!toolSpoof.getValue() || pos == null) {
@@ -529,7 +732,7 @@ public final class BreakerModule extends Module {
         PacketUtils.sendPacket(new C09PacketHeldItemChange(best));
     }
 
-    
+
 
 
 
@@ -564,9 +767,9 @@ public final class BreakerModule extends Module {
         }
     }
 
-    
 
-    
+
+
 
 
 
@@ -590,7 +793,7 @@ public final class BreakerModule extends Module {
         }
     }
 
-    
+
     private void resetSlot() {
         if (oldSlot == -1) {
             return;
@@ -604,7 +807,7 @@ public final class BreakerModule extends Module {
         oldSlot = -1;
     }
 
-    
+
     private float toolSpeed(Block block, ItemStack stack) {
         if (stack == null) {
             return 1f;
@@ -631,7 +834,7 @@ public final class BreakerModule extends Module {
         }
 
         int slot = -1;
-        
+
         ItemStack held = mc.thePlayer.inventory.getStackInSlot(mc.thePlayer.inventory.currentItem);
         float best = toolSpeed(block, held);
 
@@ -663,7 +866,7 @@ public final class BreakerModule extends Module {
         return stack != null && (stack.getItem() instanceof ItemShears || stack.getItem() instanceof ItemAxe || stack.getItem() instanceof ItemPickaxe);
     }
 
-    
+
 
     private void aim(boolean force) {
         if (!rotate.getValue() || mode.getValue() == Mode.QUEUE || breakPos == null) {
@@ -673,8 +876,8 @@ public final class BreakerModule extends Module {
             return;
         }
 
-        
-        
+
+
         boolean hold = mode.getValue() == Mode.LEGIT || mode.getValue() == Mode.VANILLA || mode.getValue() == Mode.HYPIXEL;
         if (!force && !hold) {
             return;
@@ -700,7 +903,7 @@ public final class BreakerModule extends Module {
         mc.theWorld.sendBlockBreakProgress(mc.thePlayer.getEntityId(), breakPos, (int) (progress * 10f) - 1);
     }
 
-    
+
     private EnumFacing bestFacing(BlockPos pos) {
         Vec3 eyes = mc.thePlayer.getPositionEyes(1f);
         EnumFacing best = EnumFacing.UP;
@@ -719,19 +922,64 @@ public final class BreakerModule extends Module {
         return best;
     }
 
+    private AxisAlignedBB blockBox(BlockPos pos) {
+        AxisAlignedBB box = mc.theWorld.getBlockState(pos).getBlock().getSelectedBoundingBox(mc.theWorld, pos);
+        return box != null ? box : new AxisAlignedBB(pos, pos.add(1, 1, 1));
+    }
+
+    /**
+     * The point on the face closest to our eyes, on the real block bounds (a bed is only 9/16 high), so the
+     * rotation is as small as possible and actually lands on the block instead of the air above a bed.
+     */
     private Vec3 hitVec(BlockPos pos, EnumFacing facing) {
-        return new Vec3(
-                pos.getX() + 0.5D + facing.getFrontOffsetX() * 0.5D,
-                pos.getY() + 0.5D + facing.getFrontOffsetY() * 0.5D,
-                pos.getZ() + 0.5D + facing.getFrontOffsetZ() * 0.5D);
+        AxisAlignedBB box = blockBox(pos);
+        Vec3 eyes = mc.thePlayer.getPositionEyes(1f);
+        double insetX = (box.maxX - box.minX) * 0.1D, insetY = (box.maxY - box.minY) * 0.1D, insetZ = (box.maxZ - box.minZ) * 0.1D;
+        double x = MathHelper.clamp_double(eyes.xCoord, box.minX + insetX, box.maxX - insetX);
+        double y = MathHelper.clamp_double(eyes.yCoord, box.minY + insetY, box.maxY - insetY);
+        double z = MathHelper.clamp_double(eyes.zCoord, box.minZ + insetZ, box.maxZ - insetZ);
+
+        switch (facing.getAxis()) {
+            case X:
+                x = facing == EnumFacing.EAST ? box.maxX : box.minX;
+                break;
+            case Y:
+                y = facing == EnumFacing.UP ? box.maxY : box.minY;
+                break;
+            default:
+                z = facing == EnumFacing.SOUTH ? box.maxZ : box.minZ;
+                break;
+        }
+
+        return new Vec3(x, y, z);
     }
 
     private boolean hasLineOfSight(BlockPos pos, EnumFacing facing) {
-        MovingObjectPosition hit = mc.theWorld.rayTraceBlocks(mc.thePlayer.getPositionEyes(1f), hitVec(pos, facing), false, true, false);
+        Vec3 point = hitVec(pos, facing).addVector(-facing.getFrontOffsetX() * 0.05D, -facing.getFrontOffsetY() * 0.05D, -facing.getFrontOffsetZ() * 0.05D);
+        MovingObjectPosition hit = mc.theWorld.rayTraceBlocks(mc.thePlayer.getPositionEyes(1f), point, false, true, false);
         return hit != null && hit.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK && pos.equals(hit.getBlockPos());
     }
 
-    
+    @EventHook
+    public void onRender3D(Render3DEvent event) {
+        if (!highlight.getValue() || !digging || breakPos == null || mc.theWorld == null) return;
+        if (mc.theWorld.getBlockState(breakPos).getBlock() instanceof BlockAir) return;
+
+        java.awt.Color color = breakingBed ? BedUtils.teamOf(breakPos).color : secret.kinetic.managers.impl.ColorManager.getColor();
+        AxisAlignedBB box = Render3D.toCamera(blockBox(breakPos).expand(0.002D, 0.002D, 0.002D));
+        // the fill grows from the bottom with the dig progress
+        AxisAlignedBB filled = new AxisAlignedBB(box.minX, box.minY, box.minZ, box.maxX, box.minY + (box.maxY - box.minY) * MathHelper.clamp_float(progress, 0f, 1f), box.maxZ);
+
+        Render3D.begin(true);
+        try {
+            Render3D.fill(filled, color, 0.25f);
+            Render3D.outline(box, color, 0.9f, 1.5f);
+        } finally {
+            Render3D.end();
+        }
+    }
+
+
 
     private float shownAlpha, shownProgress;
     private long lastFrame;

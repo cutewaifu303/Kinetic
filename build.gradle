@@ -88,10 +88,11 @@ shadowJar {
 build {
     dependsOn shadowJar
 }
-def correttoVersion = '8.502.07.1'
+// Zulu 8 FX: Java 8 with JavaFX, which the PandaAlts WebView needs (Corretto 8 no longer bundles JavaFX)
+def jreVersion = 'zulu8.96.0.205-ca-fx-jre8.0.504'
 def releaseJres = [
-        linux  : [url: "https://corretto.aws/downloads/resources/${correttoVersion}/amazon-corretto-${correttoVersion}-linux-x64.tar.gz", tar: true],
-        windows: [url: "https://corretto.aws/downloads/resources/${correttoVersion}/amazon-corretto-${correttoVersion}-windows-x64-jdk.zip", tar: false],
+        linux  : [url: "https://cdn.azul.com/zulu/bin/${jreVersion}-linux_x64.tar.gz", tar: true],
+        windows: [url: "https://cdn.azul.com/zulu/bin/${jreVersion}-win_x64.zip", tar: false],
 ]
 def distDir = file('dist')
 def jreCache = new File(distDir, 'jre-cache')
@@ -105,12 +106,12 @@ releaseJres.each { osName, jre ->
     def stageTask = tasks.register("releaseStage${cap}") {
         dependsOn tasks.named('shadowJar'), ':launcher:jar'
         doLast {
-            if (full && !new File(jreDir, '.ok').isFile()) {
+            if (full && (!new File(jreDir, '.ok').isFile() || new File(jreDir, '.ok').text != jreVersion)) {
                 delete jreDir
                 jreDir.mkdirs()
-                def archive = new File(jreCache, "corretto-${osName}" + (jre.tar ? '.tar.gz' : '.zip'))
+                def archive = new File(jreCache, "${jreVersion}-${osName}" + (jre.tar ? '.tar.gz' : '.zip'))
                 if (!archive.isFile()) {
-                    logger.lifecycle("[release] downloading Corretto ${correttoVersion} for ${osName}")
+                    logger.lifecycle("[release] downloading ${jreVersion} for ${osName}")
                     new URL(jre.url).withInputStream { input -> archive.withOutputStream { out -> out << input } }
                 }
                 copy {
@@ -119,7 +120,7 @@ releaseJres.each { osName, jre ->
                     includeEmptyDirs = false
                     eachFile { it.path = it.path.substring(it.path.indexOf('/') + 1) }
                 }
-                new File(jreDir, '.ok').text = correttoVersion
+                new File(jreDir, '.ok').text = jreVersion
             }
             delete stage
             copy { from tasks.getByPath(':launcher:jar').outputs.files; into stage; rename { 'Kinetic.jar' } }

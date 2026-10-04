@@ -1561,21 +1561,29 @@ public final class KineticLauncher {
         String javaHome = System.getProperty("java.home");
         if (javaHome != null) {
             File current = new File(javaHome, "bin/" + javaBinary());
-            if (current.isFile() && isJava8(current)) return current;
+            if (current.isFile() && isJava8(current) && hasJavaFx(current)) return current;
         }
         String envHome = System.getenv("JAVA_HOME");
         if (envHome != null) {
             File fromEnv = new File(envHome, "bin/" + javaBinary());
-            if (fromEnv.isFile() && isJava8(fromEnv)) return fromEnv;
+            if (fromEnv.isFile() && isJava8(fromEnv) && hasJavaFx(fromEnv)) return fromEnv;
         }
         String path = System.getenv("PATH");
         if (path != null) {
             for (String entry : path.split(File.pathSeparator)) {
                 File candidate = new File(entry, javaBinary());
-                if (candidate.isFile() && isJava8(candidate)) return candidate;
+                if (candidate.isFile() && isJava8(candidate) && hasJavaFx(candidate)) return candidate;
             }
         }
         return null;
+    }
+
+    /** The PandaAlts shop runs in a JavaFX WebView, so a system Java 8 without JavaFX is not good enough. */
+    private static boolean hasJavaFx(File java) {
+        File bin = java.getParentFile();
+        File home = bin == null ? null : bin.getParentFile();
+        if (home == null) return false;
+        return new File(home, "lib/ext/jfxrt.jar").isFile() || new File(home, "jre/lib/ext/jfxrt.jar").isFile();
     }
 
     private static boolean isJava8(File java) {
@@ -1664,7 +1672,7 @@ public final class KineticLauncher {
             String failure = null;
             try {
                 if (needJava) {
-                    appendLog("[Kinetic] No Java 8 found - downloading Amazon Corretto 8 to " + new File(dataDir, "jre").getAbsolutePath());
+                    appendLog("[Kinetic] No Java 8 with JavaFX found - downloading Azul Zulu 8 (FX) to " + new File(dataDir, "jre").getAbsolutePath());
                     ensureJava(dataDir, this::progress);
                     appendLog("[Kinetic] Java 8 ready");
                 }
@@ -1696,31 +1704,39 @@ public final class KineticLauncher {
         thread.start();
     }
 
-    private static final String CORRETTO_VERSION = "8.502.07.1";
+    // Zulu FX: Java 8 with JavaFX (Corretto 8 no longer bundles it), needed for the PandaAlts WebView
+    private static final String JRE_VERSION = "zulu8.96.0.205-ca-fx-jre8.0.504";
 
     private static File downloadedJava(File dataDir) {
         File jre = new File(dataDir, "jre");
-        if (!new File(jre, ".kinetic-jre").isFile()) return null;
+        File marker = new File(jre, ".kinetic-jre");
+        if (!marker.isFile()) return null;
+        try {
+            // older launchers downloaded Corretto without JavaFX, replace it
+            if (!JRE_VERSION.equals(new String(Files.readAllBytes(marker.toPath()), StandardCharsets.UTF_8).trim())) return null;
+        } catch (IOException e) {
+            return null;
+        }
         return firstFile(new File(jre, "bin/" + javaBinary()), new File(jre, "jre/bin/" + javaBinary()),
                 new File(jre, "Contents/Home/bin/" + javaBinary()), new File(jre, "Contents/Home/jre/bin/" + javaBinary()));
     }
 
-    private static String correttoUrl() {
+    private static String jreUrl() {
         String arch = System.getProperty("os.arch", "").toLowerCase(Locale.ROOT);
         boolean arm = arch.contains("aarch64") || arch.contains("arm64");
-        String base = "https://corretto.aws/downloads/resources/" + CORRETTO_VERSION + "/amazon-corretto-" + CORRETTO_VERSION;
-        if (WINDOWS) return base + "-windows-x64-jdk.zip";
-        if (MAC) return base + (arm ? "-macosx-aarch64.tar.gz" : "-macosx-x64.tar.gz");
-        return base + (arm ? "-linux-aarch64.tar.gz" : "-linux-x64.tar.gz");
+        String base = "https://cdn.azul.com/zulu/bin/" + JRE_VERSION;
+        if (WINDOWS) return base + "-win_x64.zip";
+        if (MAC) return base + (arm ? "-macosx_aarch64.tar.gz" : "-macosx_x64.tar.gz");
+        return base + "-linux_x64.tar.gz";
     }
 
     static File ensureJava(File dataDir, ProgressSink sink) throws IOException {
         File existing = downloadedJava(dataDir);
         if (existing != null) return existing;
-        String url = correttoUrl();
+        String url = jreUrl();
         boolean zip = url.endsWith(".zip");
         File archive = new File(dataDir, "jre-download" + (zip ? ".zip" : ".tar.gz"));
-        downloadFile(url, archive, "Java 8 (Corretto " + CORRETTO_VERSION + ")", sink);
+        downloadFile(url, archive, "Java 8 (" + JRE_VERSION + ")", sink);
         File temp = new File(dataDir, "jre.tmp");
         File target = new File(dataDir, "jre");
         deleteTree(temp);
@@ -1729,7 +1745,7 @@ public final class KineticLauncher {
         else extractTarGzStripTop(archive, temp);
         deleteTree(target);
         if (!temp.renameTo(target)) throw new IOException("Cannot move " + temp + " to " + target);
-        Files.write(new File(target, ".kinetic-jre").toPath(), CORRETTO_VERSION.getBytes(StandardCharsets.UTF_8));
+        Files.write(new File(target, ".kinetic-jre").toPath(), JRE_VERSION.getBytes(StandardCharsets.UTF_8));
         boolean ignored = archive.delete();
         File java = downloadedJava(dataDir);
         if (java == null) throw new IOException("Java binary missing after unpacking " + url);

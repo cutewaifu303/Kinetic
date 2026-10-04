@@ -26,7 +26,7 @@ final class ShopTab extends AltTab {
     ShopTab(KineticAltMenu menu) {
         super(menu);
         providers = new AltTab[]{new LocaltsTab(menu, secret.kinetic.api.gui.alt.comp.AltShopBackend.LOCALTS), new NiceAltsTab(menu),
-                new LocaltsTab(menu, secret.kinetic.api.gui.alt.comp.PandaAltsClient.BACKEND)};
+                new PandaShopTab(menu)};
         provider = loadProvider();
     }
 

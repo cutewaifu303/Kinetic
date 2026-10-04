@@ -4,6 +4,7 @@ import com.github.koxx12dev.fuckyou.ImGuiGL3;
 import com.github.koxx12dev.fuckyou.ImGuiLwjgl2;
 import secret.kinetic.utils.render.imgui.style.ImGuiStyleSheet;
 import imgui.ImFontConfig;
+import imgui.ImFont;
 import imgui.ImGui;
 import imgui.ImGuiIO;
 import imgui.ImGuiStyle;
@@ -18,6 +19,8 @@ import org.lwjgl.opengl.GL20;
 import java.awt.*;
 import java.io.InputStream;
 import java.util.Map;
+import java.util.NavigableMap;
+import java.util.TreeMap;
 
 public final class ImGuiManager {
 
@@ -26,6 +29,8 @@ public final class ImGuiManager {
     private boolean initialized;
     private final ImGuiGL3 imGuiGl = new ImGuiGL3();
     private final ImGuiLwjgl2 imGuiLwjgl = new ImGuiLwjgl2();
+    private ImFont compactFont;
+    private final NavigableMap<Integer, ImFont> compactFonts = new TreeMap<>();
 
     private ImGuiManager() {
     }
@@ -105,6 +110,10 @@ public final class ImGuiManager {
         imStyle.setGrabRounding(style.getGrabRounding());
         imStyle.setScrollbarSize(style.getScrollbarSize());
         imStyle.setScrollbarRounding(style.getScrollbarRounding());
+        imStyle.setWindowBorderSize(style.getWindowRounding() == 0f ? 0f : 1f);
+        imStyle.setChildRounding(style.getFrameRounding());
+        imStyle.setPopupRounding(style.getFrameRounding());
+        imStyle.setAntiAliasedFill(style.getWindowRounding() != 0f);
 
         for (Map.Entry<Integer, ImGuiStyleSheet.ColorValue> entry : style.getColors().entrySet()) {
             setColor(imStyle, entry.getKey(), entry.getValue());
@@ -133,11 +142,33 @@ public final class ImGuiManager {
             config.setOversampleV(2);
             io.getFonts().addFontFromMemoryTTF(bytes, 18f, config);
             config.destroy();
+
+            int[] sizes = {11, 13, 15, 17, 19, 21, 24, 28, 32};
+            for (int size : sizes) {
+                ImFontConfig compactConfig = new ImFontConfig();
+                compactConfig.setOversampleH(2);
+                compactConfig.setOversampleV(2);
+                compactConfig.setPixelSnapH(true);
+                ImFont font = io.getFonts().addFontFromMemoryTTF(bytes, size, compactConfig);
+                compactFonts.put(size, font);
+                if (size == 13) compactFont = font;
+                compactConfig.destroy();
+            }
         } catch (Exception e) {
             io.getFonts().addFontDefault();
         }
 
         imGuiGl.updateFontsTexture();
+    }
+
+    public ImFont getCompactFont(float size) {
+        if (compactFonts.isEmpty()) return compactFont;
+        int target = Math.max(1, Math.round(size));
+        Map.Entry<Integer, ImFont> floor = compactFonts.floorEntry(target);
+        Map.Entry<Integer, ImFont> ceil = compactFonts.ceilingEntry(target);
+        if (floor == null) return ceil.getValue();
+        if (ceil == null) return floor.getValue();
+        return target - floor.getKey() <= ceil.getKey() - target ? floor.getValue() : ceil.getValue();
     }
 
     private byte[] readAllBytes(InputStream inputStream) throws Exception {

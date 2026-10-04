@@ -152,11 +152,16 @@ public class WatermarkModule extends Module implements IMinecraft {
 
     @EventHook(EventPriority.VERY_HIGH)
     public void onRender2D(Render2DEvent event) {
+        if (secret.kinetic.utils.render.KineticImage.isSigmaTheme()) {
+            secret.kinetic.api.gui.sigma.SigmaHud.watermark();
+            return;
+        }
         renderWatermark(null);
     }
 
     @EventHook(EventPriority.VERY_HIGH)
     public void onShader2D(Shader2DEvent event) {
+        if (secret.kinetic.utils.render.KineticImage.isSigmaTheme()) return;
         Shader2DEvent.ShaderType pass = event.getShaderType();
         
         if (isTextOnly() && pass == Shader2DEvent.ShaderType.BLUR) return;

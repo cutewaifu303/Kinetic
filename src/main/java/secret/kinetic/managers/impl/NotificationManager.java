@@ -21,6 +21,7 @@ public class NotificationManager {
 
     @EventHook(value = EventPriority.VERY_HIGH)
     public void onShader(Shader2DEvent e) {
+        if (secret.kinetic.utils.render.KineticImage.isSigmaTheme()) return;
         NotificationRenderer.draw();
     }
 
