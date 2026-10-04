@@ -27,7 +27,7 @@ Everything runs locally. Configs are plain JSON files in `Kinetic/` next to the 
 
 ## Download and use
 
-1. Get `Kinetic-linux.zip` or `Kinetic-windows.zip` from the [Codeberg releases](https://codeberg.org/sf6y/Kinetic/releases) (the [GitHub mirror](https://github.com/cutewaifu303/Kinetic/releases) has the same files).
+1. Get `Kinetic-linux.zip` or `Kinetic-windows.zip` from the [GitHub mirror](https://github.com/cutewaifu303/Kinetic/releases).
 2. Extract the zip anywhere and start `Kinetic.jar` (double click or `java -jar Kinetic.jar`). On the first start the launcher downloads Java 8 with JavaFX (Azul Zulu 8 FX) and the Minecraft assets into its data folder (about 250 MB, once). Nothing else has to be installed.
 3. Pick RAM and game folder, press Launch. `launch.sh` and `launch.bat` start the game without the launcher once those files exist.
 4. In game: right shift opens the ClickGUI, `.help` in chat lists the commands, `.config` saves and loads configs, the Account Manager in the main menu handles cracked, Microsoft, token and cookie logins and the alt shop.
@@ -50,7 +50,7 @@ On Linux the frame flush ("Low Latency" in the Interface module) is on by defaul
 You need a JDK 11 (the build compiles against the Java 8 API with `--release 8`, which JDK 8 cannot do) and Git.
 
 ```bash
-git clone https://codeberg.org/sf6y/Kinetic.git
+git clone https://github.com/cutewaifu303/Kinetic.git
 cd Kinetic
 ./gradlew shadowJar :launcher:jar
 # -> build/libs/Kinetic.jar (client) and launcher/build/libs/Kinetic.jar (launcher)
